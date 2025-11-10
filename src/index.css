@@ -1,0 +1,31 @@
+/* C:\kr-web\src\index.css */
+
+/* Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------- Reset + base --------- */
+:root {
+  --kr-blue: #0d1b2a;
+}
+html, body, #root { height: 100%; }
+body { @apply bg-kr-ivory text-gray-900; }
+a { @apply text-[var(--kr-blue)] hover:underline; }
+img { @apply max-w-full; }
+
+/* --------- Utilidades KR (reutilizables) --------- */
+@layer components {
+  .kr-container { @apply max-w-6xl mx-auto px-4; }
+
+  .kr-card { @apply bg-white border border-gray-200 rounded-2xl p-4 shadow-sm; }
+  .kr-card-lg { @apply bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm; }
+
+  .kr-btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-medium; }
+  .kr-btn-primary { @apply kr-btn bg-gray-900 text-white hover:bg-gray-800; }
+  .kr-btn-outline { @apply kr-btn border bg-white hover:bg-gray-50; }
+
+  .kr-badge { @apply text-xs px-2 py-1 rounded-full border; }
+  .kr-badge-ok { @apply kr-badge border-emerald-300 text-emerald-700 bg-emerald-50; }
+  .kr-chip { @apply text-xs px-2 py-1 rounded-full bg-gray-100; }
+}
