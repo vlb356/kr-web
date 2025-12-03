@@ -1,10 +1,10 @@
-// src/components/Nav.jsx
+// src/components/nav/Nav.jsx
 import React, { useState } from "react";
-import { auth } from "@/lib/firebase";
+import useAuth from "@/hooks/useAuth";
 import KRLogo from "@/assets/logos/kr-logo.png";
 
 export default function Nav() {
-  const user = auth.currentUser;
+  const { user, logout } = useAuth();   // <-- ahora obtenemos user + logout
   const [open, setOpen] = useState(false);
 
   const initial =
@@ -15,6 +15,7 @@ export default function Nav() {
   return (
     <nav className="w-full border-b border-gray-200 bg-white/70 backdrop-blur-md sticky top-0 z-30">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
+
         {/* LEFT: Logo */}
         <a href="#/" className="flex items-center gap-2">
           <img src={KRLogo} alt="KR logo" className="h-8 w-8" />
@@ -29,12 +30,23 @@ export default function Nav() {
           <NavLink href="#/social" label="Social" />
 
           {user ? (
-            <a
-              href={`#/profile/${user.uid}`}
-              className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-900 text-white text-sm font-semibold"
-            >
-              {initial}
-            </a>
+            <>
+              {/* Profile button */}
+              <a
+                href={`#/profile/${user.uid}`}
+                className="flex items-center justify-center h-9 w-9 rounded-full bg-gray-900 text-white text-sm font-semibold"
+              >
+                {initial}
+              </a>
+
+              {/* LOGOUT BUTTON */}
+              <button
+                onClick={logout}
+                className="text-sm font-medium text-red-600 hover:text-red-800"
+              >
+                Logout
+              </button>
+            </>
           ) : (
             <a href="#/auth" className="kr-btn px-4 py-1.5">
               Login
@@ -42,18 +54,12 @@ export default function Nav() {
           )}
         </div>
 
-        {/* MOBILE BUTTON */}
+        {/* MOBILE MENU BUTTON */}
         <button
           onClick={() => setOpen(!open)}
           className="md:hidden h-10 w-10 flex items-center justify-center rounded-md hover:bg-gray-100"
         >
-          <svg
-            width="24"
-            height="24"
-            stroke="currentColor"
-            fill="none"
-            strokeWidth="2"
-          >
+          <svg width="24" height="24" stroke="currentColor" fill="none" strokeWidth="2">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
@@ -69,15 +75,25 @@ export default function Nav() {
           <MobileLink href="#/social" label="Social" />
 
           {user ? (
-            <a
-              href={`#/profile/${user.uid}`}
-              className="flex items-center gap-3 py-2 text-gray-800"
-            >
-              <div className="h-9 w-9 flex items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold">
-                {initial}
-              </div>
-              <span>{user.email}</span>
-            </a>
+            <>
+              <a
+                href={`#/profile/${user.uid}`}
+                className="flex items-center gap-3 py-2 text-gray-800"
+              >
+                <div className="h-9 w-9 flex items-center justify-center rounded-full bg-gray-900 text-white text-sm font-semibold">
+                  {initial}
+                </div>
+                <span>{user.email}</span>
+              </a>
+
+              {/* MOBILE LOGOUT */}
+              <button
+                onClick={logout}
+                className="w-full text-left text-red-600 text-sm underline pt-2"
+              >
+                Logout
+              </button>
+            </>
           ) : (
             <a
               href="#/auth"

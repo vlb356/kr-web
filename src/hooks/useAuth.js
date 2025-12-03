@@ -48,6 +48,7 @@ export default function useAuth() {
   }
   async function logout() {
     await fbLogout();
+    window.location.hash = "/auth"; // opcional, pero recomendado
   }
 
   return { user, sub, loading, login, register, pay, logout };

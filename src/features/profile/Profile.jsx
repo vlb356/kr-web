@@ -1,71 +1,113 @@
 // src/features/profile/Profile.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { listenUserPosts } from "@/lib/social";
+import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import useAuth from "@/hooks/useAuth";
 
 export default function Profile() {
   const { uid } = useParams();
-  const currentUser = auth.currentUser;
+  const { user: current } = useAuth();
 
-  // Determine which profile to show
-  const targetUid = useMemo(() => {
-    if (uid) return uid;
-    return currentUser?.uid || "";
-  }, [uid, currentUser]);
-
+  const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // === LOAD USER PROFILE ===
   useEffect(() => {
-    if (!targetUid) return;
+    async function loadProfile() {
+      try {
+        const snap = await getDoc(doc(db, "users", uid));
+        if (snap.exists()) {
+          setProfile({ id: snap.id, ...snap.data() });
+        }
+      } catch (err) {
+        console.error("Profile error:", err);
+      }
+      setLoading(false);
+    }
+    loadProfile();
+  }, [uid]);
 
-    const unsub = listenUserPosts(targetUid, setPosts);
-    return () => unsub && unsub();
-  }, [targetUid]);
-
-  if (!targetUid) {
+  if (loading)
     return (
-      <div className="kr-card">
-        <p className="kr-muted">Sign in to see your profile.</p>
+      <div className="flex justify-center py-20 text-gray-500">Loading…</div>
+    );
+
+  if (!profile)
+    return (
+      <div className="flex flex-col items-center py-20">
+        <h2 className="text-xl font-semibold">User not found</h2>
+        <p className="text-gray-600 mt-2">This profile doesn't exist.</p>
       </div>
     );
-  }
 
-  const initial = (
-    currentUser?.name ||
-    currentUser?.email ||
-    "U"
-  )
-    .charAt(0)
-    .toUpperCase();
+  const isOwner = current?.uid === uid;
 
   return (
-    <div className="kr-space-y">
-      {/* HEADER */}
-      <div className="kr-card kr-profile-header">
-        <div className="kr-avatar">{initial}</div>
-        <div>
-          <h2 style={{ margin: 0 }}>
-            {currentUser?.name || currentUser?.email || "User"}
-          </h2>
-          <div className="kr-muted">{posts.length} posts</div>
+    <div className="max-w-5xl mx-auto px-4 py-10">
+      {/* ====================== HEADER CARD ====================== */}
+      <div className="kr-card p-8 flex flex-col md:flex-row items-center md:items-start gap-6">
+        {/* Avatar */}
+        <div className="h-32 w-32 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 text-white flex items-center justify-center text-4xl font-bold shadow-lg">
+          {profile.name?.charAt(0).toUpperCase()}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">{profile.name}</h1>
+
+          <p className="text-gray-600 mt-1">{profile.email}</p>
+
+          {profile.subscription?.active ? (
+            <div className="mt-3 inline-block bg-green-100 text-green-700 px-4 py-1 rounded-full text-sm font-medium">
+              Active plan: {profile.subscription.plan}
+            </div>
+          ) : (
+            <div className="mt-3 inline-block bg-red-100 text-red-700 px-4 py-1 rounded-full text-sm font-medium">
+              No subscription
+            </div>
+          )}
+
+          {isOwner && (
+            <a
+              href="#/settings"
+              className="inline-block mt-4 text-sm text-blue-600 font-medium underline"
+            >
+              Edit profile
+            </a>
+          )}
         </div>
       </div>
 
-      {/* POSTS GRID */}
-      <div className="kr-grid-tiles">
-        {posts.map((p) => (
-          <div key={p.id} className="kr-tile">
-            <img src={p.imageUrl} alt={p.caption || ""} />
-          </div>
-        ))}
-
-        {posts.length === 0 && (
-          <div className="kr-card">
-            <p className="kr-muted">No posts yet.</p>
-          </div>
-        )}
+      {/* ====================== STATS ROW ====================== */}
+      <div className="grid grid-cols-3 gap-4 mt-8">
+        <StatCard label="Posts" value={profile.posts || 0} />
+        <StatCard label="Events joined" value={profile.events || 0} />
+        <StatCard label="Leagues" value={profile.leagues || 0} />
       </div>
+
+      {/* ====================== RECENT ACTIVITY ====================== */}
+      <div className="mt-10">
+        <h2 className="text-xl font-semibold mb-4">Recent activity</h2>
+
+        <div className="kr-card p-6">
+          <p className="text-gray-500 text-sm">
+            No recent activity yet. Join events and comment on forums to see
+            updates here.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================= SUB-COMPONENT ========================= */
+function StatCard({ label, value }) {
+  return (
+    <div className="kr-card p-5 text-center shadow-sm">
+      <p className="text-3xl font-bold text-gray-900">{value}</p>
+      <p className="text-gray-600 text-sm mt-1">{label}</p>
     </div>
   );
 }

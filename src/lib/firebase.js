@@ -208,10 +208,18 @@ export async function addForumMessage(forumId, text) {
   });
 }
 
-export async function deleteForumMessage(forumId, messageId) {
-  const ref = doc(db, "forums", forumId, "messages", messageId);
-  await deleteDoc(ref);
+// Borrar mensaje de foro y decrementar contador de posts
+export async function deleteForumMessage(forumId, msgId) {
+  // 1) Borramos el mensaje
+  await deleteDoc(doc(db, "forums", forumId, "messages", msgId));
+
+  // 2) Decrementamos el contador de posts en el foro
+  await updateDoc(doc(db, "forums", forumId), {
+    posts: increment(-1),
+    updatedAt: serverTimestamp(),
+  });
 }
+
 
 export async function deleteComment(topicId, commentId) {
   const ref = doc(db, "topics", topicId, "comments", commentId);
