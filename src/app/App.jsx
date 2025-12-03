@@ -3,13 +3,12 @@ import React from "react";
 import { HashRouter as Router, Routes, Route } from "react-router-dom";
 
 import Nav from "@/components/nav/Nav";
+import ProtectedRoute from "@/components/access/ProtectedRoute";
 
-// HOME (landing / marketing)
 import Marketing from "@/features/marketing/Marketing";
-
-// FEATURES
 import Explore from "@/features/explore/Explore";
 import Events from "@/features/events/Events";
+import CreateEvent from "@/features/events/CreateEvent";
 import Leagues from "@/features/leagues/Leagues";
 import Social from "@/features/social/Social";
 
@@ -20,7 +19,6 @@ import Profile from "@/features/profile/Profile";
 import EditProfile from "@/features/profile/EditProfile";
 import ForumDetail from "@/features/social/ForumDetail";
 import SearchUsers from "@/features/profile/SearchUsers";
-import CreateEvent from "@/features/events/CreateEvent";
 
 export default function App() {
   return (
@@ -30,37 +28,43 @@ export default function App() {
 
         <main className="flex-1">
           <Routes>
-            {/* HOME → Marketing page */}
+            {/* Public */}
             <Route path="/" element={<Marketing />} />
-
-            {/* EXPLORE (separate page) */}
             <Route path="/explore" element={<Explore />} />
-
-            {/* AUTH */}
+            <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/auth" element={<Auth />} />
 
-            <Route path="/subscriptions" element={<Subscriptions />} />
-            
-            {/* PROFILE */}
-            <Route path="/profile/:id" element={<Profile />} />
-            <Route path="/edit-profile" element={<EditProfile />} />
+            {/* Protected */}
+            <Route path="/profile/:id" element={
+              <ProtectedRoute><Profile /></ProtectedRoute>
+            } />
 
-            {/* SEARCH USERS */}
-            <Route path="/search" element={<SearchUsers />} />
+            <Route path="/edit-profile" element={
+              <ProtectedRoute><EditProfile /></ProtectedRoute>
+            } />
 
-            {/* EVENTS */}
-            <Route path="/events" element={<Events />} />
-            <Route path="/create-event" element={<CreateEvent />} />
+            <Route path="/search" element={
+              <ProtectedRoute><SearchUsers /></ProtectedRoute>
+            } />
+
+            <Route path="/events" element={
+              <ProtectedRoute><Events /></ProtectedRoute>
+            } />
+
+            <Route path="/create-event" element={
+              <ProtectedRoute><CreateEvent /></ProtectedRoute>
+            } />
 
 
-            {/* LEAGUES */}
-            <Route path="/leagues" element={<Leagues />} />
+            <Route path="/social" element={
+              <ProtectedRoute><Social /></ProtectedRoute>
+            } />
 
-            {/* SOCIAL / FORUMS */}
-            <Route path="/social" element={<Social />} />
-            <Route path="/forum/:id" element={<ForumDetail />} />
+            <Route path="/forum/:id" element={
+              <ProtectedRoute><ForumDetail /></ProtectedRoute>
+            } />
 
-            {/* FALLBACK */}
+            {/* Not found */}
             <Route
               path="*"
               element={
