@@ -139,9 +139,22 @@ export async function leaveEvent(eventId, uid) {
   await updateDoc(ref, { attendees: arrayRemove(uid) });
 }
 
-// -------- FOROS --------
+// DELETE EVENT (only owner)
+export async function deleteEvent(eventId, ownerUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
 
-// 1) Lectura en vivo mejorada con callback de error opcional
+  if (me !== ownerUid) {
+    throw new Error("Only the event owner can delete this event");
+  }
+
+  await deleteDoc(doc(db, "events", eventId));
+}
+
+
+// --- FORUMS ---
+
+// LISTEN FORUMS
 export function listenForums(onData, onError) {
   const qy = query(collection(db, "forums"), orderBy("updatedAt", "desc"));
   return onSnapshot(
@@ -157,37 +170,41 @@ export function listenForums(onData, onError) {
   );
 }
 
-// 2) Fetch inicial por si el listener falla (pinta algo ya)
+// GET FORUMS ONCE (NECESARIO PARA Social.jsx)
 export async function getForumsOnce() {
   const qy = query(collection(db, "forums"), orderBy("updatedAt", "desc"));
   const snap = await getDocs(qy);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function addForum({ title, description = "", tag = "general" }) {
-  const uid = auth.currentUser?.uid || null;
-  const ownerName =
-    auth.currentUser?.displayName || auth.currentUser?.email || "User";
+// CREATE FORUM (¡¡CORREGIDO!!)
+export async function addForum({ title, description = "", tag = "general", ownerUid }) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Not authenticated");
+
   const ref = await addDoc(collection(db, "forums"), {
     title,
     description,
     tag,
-    ownerUid: uid,
-    ownerName,
+    ownerUid: ownerUid || uid,
+    ownerName:
+      auth.currentUser?.displayName || auth.currentUser?.email || "User",
     posts: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
   return ref.id;
 }
 
-// Helpers para detalle (por si los usas)
+// GET A FORUM
 export async function getForum(forumId) {
   const ref = doc(db, "forums", forumId);
   const snap = await getDoc(ref);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+// LISTEN MESSAGES
 export function listenForumMessages(forumId, cb, onError) {
   const qy = query(
     collection(db, "forums", forumId, "messages"),
@@ -203,50 +220,40 @@ export function listenForumMessages(forumId, cb, onError) {
   );
 }
 
+// CREATE MESSAGE
 export async function addForumMessage(forumId, text) {
   const uid = auth.currentUser?.uid;
-  const name =
-    auth.currentUser?.displayName ||
-    auth.currentUser?.email ||
-    "User";
-
   if (!uid) throw new Error("Please sign in first");
 
-  // 1) Crear mensaje en el foro
-  const ref = await addDoc(collection(db, "forums", forumId, "messages"), {
+  const name =
+    auth.currentUser?.displayName || auth.currentUser?.email || "User";
+
+  await addDoc(collection(db, "forums", forumId, "messages"), {
     text,
     uid,
     name,
     createdAt: serverTimestamp(),
   });
 
-  // 2) Incrementar posts del foro
   await updateDoc(doc(db, "forums", forumId), {
     posts: increment(1),
     updatedAt: serverTimestamp(),
   });
-
-  // 3) Registrar el post dentro del usuario
-  await addDoc(collection(db, "users", uid, "posts"), {
-    forumId,
-    messageId: ref.id,
-    text,
-    createdAt: serverTimestamp(),
-  });
-
-  // 4) Aumentar contador general del usuario
-  await updateDoc(doc(db, "users", uid), {
-    posts: increment(1)
-  });
 }
 
 
-// Borrar mensaje de foro y decrementar contador de posts
-export async function deleteForumMessage(forumId, msgId) {
-  // 1) Borramos el mensaje
+// DELETE A MESSAGE
+export async function deleteForumMessage(forumId, msgId, msgOwnerUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
+
+  // Seguridad frontend (Firestore ya valida también)
+  if (me !== msgOwnerUid) {
+    throw new Error("You can only delete your own messages");
+  }
+
   await deleteDoc(doc(db, "forums", forumId, "messages", msgId));
 
-  // 2) Decrementamos el contador de posts en el foro
   await updateDoc(doc(db, "forums", forumId), {
     posts: increment(-1),
     updatedAt: serverTimestamp(),
@@ -254,23 +261,25 @@ export async function deleteForumMessage(forumId, msgId) {
 }
 
 
-export async function deleteComment(topicId, commentId) {
-  const ref = doc(db, "topics", topicId, "comments", commentId);
-  await deleteDoc(ref);
-}
+// DELETE A FORUM
+export async function deleteForum(forumId, forumOwnerUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
 
-export async function deleteForum(forumId) {
-  const forumRef = doc(db, "forums", forumId);
+  if (me !== forumOwnerUid) {
+    throw new Error("Only the owner can delete this forum");
+  }
 
-  // Delete messages inside the forum
   const messagesRef = collection(db, "forums", forumId, "messages");
-  const messagesSnap = await getDocs(messagesRef);
-  const batchDeletes = messagesSnap.docs.map((m) => deleteDoc(m.ref));
-  await Promise.all(batchDeletes);
+  const snap = await getDocs(messagesRef);
 
-  // Delete the forum itself
-  await deleteDoc(forumRef);
+  // Borrado en paralelo
+  const deletions = snap.docs.map((m) => deleteDoc(m.ref));
+  await Promise.all(deletions);
+
+  await deleteDoc(doc(db, "forums", forumId));
 }
+
 
 // ADD comment to a topic
 export async function addComment(topicId, text) {

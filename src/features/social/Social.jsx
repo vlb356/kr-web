@@ -1,202 +1,148 @@
 // src/features/social/Social.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { addForum, getForumsOnce, listenForums, deleteForum } from "@/lib/firebase";
+import React, { useEffect, useState } from "react";
+import {
+  listenForums,
+  addForum,
+  getForumsOnce,
+} from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
+import { Link } from "react-router-dom";
 
-export default function Social({ user }) {
+export default function Social() {
   const [forums, setForums] = useState([]);
-  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [tag, setTag] = useState("general");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
 
-  const currentUid = auth.currentUser?.uid || "";
-
-  // Initial load + realtime sync
   useEffect(() => {
-    let unsub = () => { };
-    (async () => {
-      try {
-        const first = await getForumsOnce();
-        setForums(first);
-      } catch (e) {
-        console.error("[getForumsOnce] error:", e);
-        setError(e?.message || "Could not load forums.");
-      }
-      unsub = listenForums(
-        (rows) => setForums(rows),
-        (err) => setError(err?.message || "Cannot read forums.")
-      );
-    })();
-    return () => unsub && unsub();
+    const unsub = listenForums((rows) => {
+      setForums(rows);
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, []);
 
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return forums;
-    return forums.filter(
-      (f) =>
-        f?.title?.toLowerCase().includes(q) ||
-        f?.description?.toLowerCase().includes(q)
-    );
-  }, [forums, filter]);
-
-  async function onCreate(e) {
+  async function handleCreateForum(e) {
     e.preventDefault();
-    setError("");
+    setCreating(true);
 
-    if (!user?.uid) {
-      setError("You must be logged in.");
-      return;
-    }
-    if (!title.trim()) {
-      setError("Title is required.");
-      return;
-    }
-
-    setLoading(true);
     try {
       await addForum({
-        title: title.trim(),
-        description: desc.trim(),
+        title,
+        description: desc,
         tag,
-        ownerUid: currentUid,
-        ownerName: user?.name || user?.email || "User",
+        ownerUid: auth.currentUser.uid, // 🔥 OBLIGATORIO
       });
 
       setTitle("");
       setDesc("");
       setTag("general");
+      setOpen(false);
     } catch (err) {
-      console.error(err);
-      setError(err?.message || "Could not create forum.");
-    } finally {
-      setLoading(false);
+      alert("Error: " + err.message);
     }
+
+    setCreating(false);
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      {/* FILTER */}
-      <div className="mb-6">
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter forums by title..."
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-blue-200"
-        />
+    <div className="max-w-5xl mx-auto px-6 py-10">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-4xl font-bold text-gray-900">Community Forums</h1>
+
+        <button
+          onClick={() => setOpen(true)}
+          className="px-5 py-2 rounded-xl bg-orange-600 text-white font-semibold shadow hover:bg-orange-700"
+        >
+          + New Forum
+        </button>
       </div>
 
-      {/* CREATE FORUM */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-gray-800">Create forum</h2>
+      {open && (
+        <div className="bg-white border rounded-xl p-6 shadow mb-10">
+          <h2 className="text-2xl font-bold mb-4">Create a Forum</h2>
 
-        {error && (
-          <div className="mb-3 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+          <form onSubmit={handleCreateForum} className="space-y-4">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder="Forum title"
+              className="w-full border rounded-lg px-4 py-2"
+            />
 
-        <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-3">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title"
-            className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-blue-200"
-          />
-          <input
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Short description"
-            className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-blue-200"
-          />
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              placeholder="Description..."
+              className="w-full border rounded-lg px-4 py-2 h-24"
+            />
 
-          <div className="flex gap-3">
             <select
               value={tag}
               onChange={(e) => setTag(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full border rounded-lg px-4 py-2"
             >
-              <option value="general">general</option>
-              <option value="padel">padel</option>
-              <option value="basket">basket</option>
-              <option value="volleyball">volleyball</option>
-              <option value="gym">gym</option>
+              <option value="general">General</option>
+              <option value="football">Football</option>
+              <option value="basket">Basketball</option>
+              <option value="gym">Gym & Fitness</option>
             </select>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-xl bg-gray-900 px-5 py-3 font-medium text-white shadow-sm transition hover:bg-gray-800 disabled:opacity-60"
-            >
-              {loading ? "Creating..." : "Create"}
-            </button>
-          </div>
-        </form>
-      </div>
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={creating}
+                className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold shadow hover:bg-blue-700"
+              >
+                {creating ? "Creating..." : "Create"}
+              </button>
 
-      {/* LIST OF FORUMS */}
-      <div className="mt-8 grid gap-5 md:grid-cols-2">
-        {filtered.length === 0 ? (
-          <p className="text-sm text-gray-500">No forums found.</p>
-        ) : (
-          filtered.map((f) => (
-            <ForumCard key={f.id} f={f} currentUid={currentUid} />
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ForumCard({ f, currentUid }) {
-  const when =
-    f?.updatedAt?.seconds
-      ? new Date(f.updatedAt.seconds * 1000).toLocaleString()
-      : "—";
-
-  async function handleDelete() {
-    if (!confirm("Delete this forum and its messages?")) return;
-    await deleteForum(f.id);
-  }
-
-  return (
-    <div className="kr-card hover:shadow-md transition-shadow relative">
-      {/* OWNER DELETE BUTTON */}
-      {f.ownerUid === currentUid && (
-        <button
-          onClick={handleDelete}
-          className="absolute top-2 right-2 text-red-600 text-xs hover:underline"
-        >
-          Delete
-        </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="px-5 py-2 border rounded-lg font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
-      <a href={`#/forum/${f.id}`} className="block">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-            {f?.tag || "general"}
-          </span>
-          <span className="text-xs text-gray-400">updated {when}</span>
+      {loading ? (
+        <div className="text-gray-500 text-center">Loading forums…</div>
+      ) : forums.length === 0 ? (
+        <div className="text-gray-500 text-center">
+          No forums created yet. Be the first!
         </div>
+      ) : (
+        <div className="space-y-4">
+          {forums.map((f) => (
+            <Link
+              key={f.id}
+              to={`/forum/${f.id}`}
+              className="block bg-white border rounded-xl p-5 shadow hover:shadow-lg transition"
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-semibold">{f.title}</h2>
+                  <p className="text-gray-500">{f.description || "No description"}</p>
+                </div>
 
-        <h3 className="text-lg font-semibold text-gray-900">
-          {f.title}
-        </h3>
-
-        {f.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-gray-600">
-            {f.description}
-          </p>
-        )}
-
-        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-          <span>{f?.posts || 0} posts</span>
-          <span>by {f?.ownerName || "User"}</span>
+                <span className="px-3 py-1 text-sm rounded-full bg-orange-100 text-orange-600 font-semibold">
+                  {f.tag}
+                </span>
+              </div>
+            </Link>
+          ))}
         </div>
-      </a>
+      )}
     </div>
   );
 }

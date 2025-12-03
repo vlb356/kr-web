@@ -1,187 +1,141 @@
 // src/features/events/Events.jsx
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { listenEvents, joinEvent, leaveEvent, deleteEvent } from "@/lib/firebase";
 import useAuth from "@/hooks/useAuth";
-import { listenEvents, addEvent, joinEvent, leaveEvent } from "@/lib/firebase";
-import { Container, Input, Button, Card } from "@/components/ui";
-import SubscriptionRequired from "@/components/SubscriptionRequired";
 
 export default function Events() {
-  const { user, sub } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [events, setEvents] = useState([]);
 
-  // Load events from Firestore
   useEffect(() => {
-    const unsub = listenEvents(setEvents);
-    return () => unsub();
+    const unsub = listenEvents((rows) => setEvents(rows || []));
+    return () => unsub && unsub();
   }, []);
 
-  // Require subscription
-  if (!user || !sub.active) {
-    return <SubscriptionRequired />;
+  function handleCreate() {
+    navigate("/create-event");
   }
 
   return (
-    <Container>
-      <Header />
-      <CreateEventForm user={user} />
-      <EventList events={events} user={user} />
-    </Container>
-  );
-}
+    <div className="max-w-6xl mx-auto px-4 py-10">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+        <div>
+          <h1 className="text-4xl font-bold text-[#122944]">Events</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Join sport activities created by the community.
+          </p>
+        </div>
 
-function Header() {
-  return (
-    <div className="mb-8">
-      <h1 className="text-3xl font-bold">Events & Activities</h1>
-      <p className="text-gray-600">
-        Create games, book courts and join local events.
-      </p>
+        {/* Botón naranja KR (mismo que Social) */}
+        <button
+          onClick={handleCreate}
+          className="px-5 py-2.5 rounded-xl text-white font-semibold bg-[#E96F19] shadow-md hover:bg-[#cf5f15] transition border-none"
+        >
+          + Create Event
+        </button>
+      </div>
+
+      {/* LISTA */}
+      {events.length === 0 ? (
+        <div className="kr-card text-center text-gray-500">
+          No events yet. Be the first one to create one!
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {events.map((ev) => (
+            <EventCard key={ev.id} ev={ev} user={user} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ---------------------------
-// Event Creation Form
-// ---------------------------
-function CreateEventForm({ user }) {
-  const [title, setTitle] = useState("");
-  const [venue, setVenue] = useState("");
-  const [date, setDate] = useState("");
-  const [capacity, setCapacity] = useState(10);
+function EventCard({ ev, user }) {
+  const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  async function handleSubmit() {
-    if (!title || !venue || !date) {
-      return alert("Please fill out all fields.");
+  const joined = user ? (ev.attendees || []).includes(user.uid) : false;
+  const isOwner = user && ev.ownerUid === user.uid;
+
+  async function handleToggleJoin() {
+    if (!user) return alert("Please log in first.");
+    setLoading(true);
+
+    try {
+      if (joined) {
+        await leaveEvent(ev.id, user.uid);
+      } else {
+        await joinEvent(ev.id, user.uid);
+      }
+    } catch (err) {
+      alert(err.message);
     }
 
-    await addEvent({
-      title,
-      venue,
-      date,
-      capacity,
-      ownerUid: user.uid,
-    });
+    setLoading(false);
+  }
 
-    setTitle("");
-    setVenue("");
-    setDate("");
-    setCapacity(10);
+  async function handleDelete() {
+    if (!isOwner) return;
+    const ok = window.confirm("Do you really want to delete this event?");
+    if (!ok) return;
+
+    setDeleting(true);
+    try {
+      await deleteEvent(ev.id, ev.ownerUid);
+    } catch (err) {
+      alert(err.message);
+    }
+    setDeleting(false);
   }
 
   return (
-    <Card padding="md" className="mb-6">
-      <h2 className="font-bold mb-3 text-lg">Create event</h2>
+    <div className="kr-card flex flex-col md:flex-row md:items-center md:justify-between gap-5 py-5">
+      {/* INFO */}
+      <div>
+        <h3 className="text-xl font-semibold text-[#122944]">{ev.title}</h3>
+        <p className="text-sm text-gray-600">{ev.venue}</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-        <Input
-          placeholder="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+        <div className="flex flex-wrap items-center gap-6 mt-2 text-gray-500 text-sm">
+          <div>
+            <span className="font-semibold">Date:</span>{" "}
+            {ev.date ? new Date(ev.date).toLocaleString() : "—"}
+          </div>
 
-        <Input
-          placeholder="Venue"
-          value={venue}
-          onChange={(e) => setVenue(e.target.value)}
-        />
-
-        <Input
-          type="datetime-local"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-
-        <Input
-          type="number"
-          min="1"
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-        />
-
-        <Button variant="primary" onClick={handleSubmit}>
-          Publish
-        </Button>
+          <div>
+            <span className="font-semibold">Attendees:</span>{" "}
+            {(ev.attendees || []).length}/{ev.capacity || 10}
+          </div>
+        </div>
       </div>
-    </Card>
-  );
-}
 
-// ---------------------------
-// Event List
-// ---------------------------
-function EventList({ events, user }) {
-  if (events.length === 0) {
-    return <p className="text-gray-500">No events yet.</p>;
-  }
+      {/* ACTIONS */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleToggleJoin}
+          disabled={loading || deleting}
+          className={`px-6 py-2.5 rounded-full font-semibold shadow-md transition ${joined
+              ? "bg-gray-100 text-gray-800 border border-gray-300"
+              : "bg-[#1662A6] text-white hover:bg-[#0f4a7d]"
+            }`}
+        >
+          {loading ? "Please wait..." : joined ? "Leave Event" : "Join Event"}
+        </button>
 
-  async function handleJoin(ev) {
-    try {
-      await joinEvent(ev.id, user.uid);
-    } catch (e) {
-      alert(e.message);
-    }
-  }
-
-  async function handleLeave(ev) {
-    try {
-      await leaveEvent(ev.id, user.uid);
-    } catch (e) {
-      alert(e.message);
-    }
-  }
-
-  return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {events.map((ev) => {
-        const attendees = ev.attendees || [];
-        const isJoined = attendees.includes(user.uid);
-        const isFull = attendees.length >= ev.capacity;
-
-        return (
-          <Card key={ev.id} padding="md" className="flex flex-col justify-between">
-            <div>
-              <h3 className="font-bold text-lg">{ev.title}</h3>
-              <p className="text-gray-600">{ev.venue}</p>
-
-              <p className="mt-2 text-sm text-gray-500">
-                {new Date(ev.date).toLocaleString()}
-              </p>
-
-              <p className="mt-3 text-sm text-gray-600">
-                {attendees.length} / {ev.capacity} attendees
-              </p>
-            </div>
-
-            <div className="mt-4">
-              {isJoined && (
-                <Button
-                  variant="gray"
-                  className="w-full"
-                  onClick={() => handleLeave(ev)}
-                >
-                  Leave event
-                </Button>
-              )}
-
-              {!isJoined && !isFull && (
-                <Button
-                  variant="primary"
-                  className="w-full"
-                  onClick={() => handleJoin(ev)}
-                >
-                  Join event
-                </Button>
-              )}
-
-              {isFull && !isJoined && (
-                <Button variant="danger" className="w-full" disabled>
-                  Event full
-                </Button>
-              )}
-            </div>
-          </Card>
-        );
-      })}
+        {isOwner && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting || loading}
+            className="text-sm text-red-600 hover:text-red-800"
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

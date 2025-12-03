@@ -1,8 +1,48 @@
-/* src/styles/tailwind.css */
-
 /* src/styles/kr.css */
 
-/* BOTONES */
+/* =========================
+   🎨 COLORES OFICIALES KR
+   ========================= */
+:root {
+    --kr-blue: #1662A6;
+    --kr-dark: #122944;
+    --kr-orange: #E96F19;
+    --kr-light-bg: #F5F7FA;
+}
+
+/* Helpers genéricos */
+.bg-kr-blue {
+    background-color: var(--kr-blue);
+}
+
+.bg-kr-dark {
+    background-color: var(--kr-dark);
+}
+
+.bg-kr-orange {
+    background-color: var(--kr-orange);
+}
+
+.text-kr-blue {
+    color: var(--kr-blue);
+}
+
+.text-kr-dark {
+    color: var(--kr-dark);
+}
+
+.text-kr-orange {
+    color: var(--kr-orange);
+}
+
+/* Gradiente corporativo */
+.bg-kr-gradient {
+    background: linear-gradient(to right, var(--kr-blue), var(--kr-dark));
+}
+
+/* =========================
+   🔘 BOTONES
+   ========================= */
 .kr-btn {
     display: inline-flex;
     align-items: center;
@@ -20,7 +60,7 @@
 }
 
 .kr-btn-primary {
-    background: #122944;
+    background: var(--kr-dark);
     color: white;
 }
 
@@ -28,7 +68,18 @@
     background: #0f1f33;
 }
 
-/* CARDS */
+.kr-btn-blue {
+    background: var(--kr-blue);
+    color: white;
+}
+
+.kr-btn-blue:hover {
+    background: #0f4f82;
+}
+
+/* =========================
+   🧊 TARJETAS
+   ========================= */
 .kr-card {
     background: white;
     border: 1px solid #e5e7eb;
@@ -37,14 +88,19 @@
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
 }
 
-/* SPACING */
+/* =========================
+   📏 SPACING
+   ========================= */
 .kr-space-y>*+* {
     margin-top: 24px;
 }
 
-/* BÁSICOS */
-.kr-mr {
-    margin-right: 8px;
+/* =========================
+   🅰️ TIPOGRAFÍA
+   ========================= */
+.kr-h1 {
+    font-size: 32px;
+    font-weight: 700;
 }
 
 .kr-h2 {
@@ -59,4 +115,40 @@
 
 .kr-muted {
     color: #6b7280;
+}
+
+/* =========================
+   🟦 EVENT CARDS SPECIFIC
+   ========================= */
+
+.event-card {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    border: 1px solid #e5e7eb;
+    transition: 0.3s;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.event-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12);
+}
+
+/* Tags y chips */
+.chip {
+    padding: 4px 10px;
+    font-size: 13px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.chip-green {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.chip-red {
+    background: #fee2e2;
+    color: #991b1b;
 }

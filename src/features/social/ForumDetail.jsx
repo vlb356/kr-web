@@ -1,147 +1,204 @@
 // src/features/social/ForumDetail.jsx
 import React, { useEffect, useState } from "react";
-import { db, addForumMessage, deleteForumMessage, auth } from "@/lib/firebase";
+import { useParams } from "react-router-dom";
+
 import {
-  doc,
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
-import { useParams, Link } from "react-router-dom";
+  getForum,
+  listenForumMessages,
+  addForumMessage,
+  deleteForumMessage,
+  deleteForum
+} from "@/lib/firebase";
+
+import useAuth from "@/hooks/useAuth";
 
 export default function ForumDetail() {
-  const { id: forumId } = useParams();
+  const { id } = useParams();
+  const { user } = useAuth();
+
   const [forum, setForum] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [loadingForum, setLoadingForum] = useState(true);
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
 
-  const currentUid = auth.currentUser?.uid || "";
-
-  // Load forum info
+  // Load forum details
   useEffect(() => {
-    if (!forumId) return;
+    async function load() {
+      const f = await getForum(id);
+      setForum(f);
+      setLoadingForum(false);
+    }
+    load();
+  }, [id]);
 
-    const unsub = onSnapshot(doc(db, "forums", forumId), (snap) => {
-      setForum(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-      setLoading(false);
-    });
-
-    return () => unsub && unsub();
-  }, [forumId]);
-
-  // Load messages
+  // Messages listener
   useEffect(() => {
-    if (!forumId) return;
-
-    const q = query(
-      collection(db, "forums", forumId, "messages"),
-      orderBy("createdAt", "asc")
+    const unsub = listenForumMessages(
+      id,
+      (msgs) => {
+        setMessages(msgs);
+      },
+      (err) => console.error(err)
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    return () => unsub();
+  }, [id]);
 
-    return () => unsub && unsub();
-  }, [forumId]);
-
-  async function send(e) {
-    e.preventDefault();
-    const v = text.trim();
-    if (!v) return;
-
-    await addForumMessage(forumId, v);
-    setText("");
-  }
-
-  async function handleDelete(messageId) {
-    if (!window.confirm("Delete this message?")) return;
-    await deleteForumMessage(forumId, messageId);
-  }
-
-  if (loading) {
+  if (loadingForum) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8 text-gray-500">
-        Loading…
+      <div className="p-10 text-center text-gray-500 text-xl">
+        Loading forum…
       </div>
     );
   }
 
   if (!forum) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-rose-700">
-            Forum not found
-          </h2>
-          <Link to="/social" className="inline-block mt-3 text-blue-600 underline">
-            ← Back to forums
-          </Link>
-        </div>
+      <div className="p-10 text-center text-gray-500 text-xl">
+        Forum not found.
       </div>
     );
   }
 
+  // ------------------------------
+  // SEND MESSAGE
+  // ------------------------------
+  async function handleSend(e) {
+    e.preventDefault();
+
+    if (!text.trim()) return;
+
+    try {
+      await addForumMessage(id, text.trim());
+      setText("");
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ------------------------------
+  // DELETE MESSAGE
+  // ------------------------------
+  async function handleDeleteMessage(msgId, msgOwnerUid) {
+    try {
+      await deleteForumMessage(id, msgId, msgOwnerUid);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ------------------------------
+  // DELETE FORUM
+  // ------------------------------
+  async function handleDeleteForum() {
+    if (!confirm("Are you sure you want to delete the entire forum?")) return;
+
+    try {
+      await deleteForum(id, forum.ownerUid);
+      window.location.hash = "/social";
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
+  }
+
+  const isOwner = user?.uid === forum.ownerUid;
+  const initial =
+    forum.ownerName?.charAt(0)?.toUpperCase() ||
+    forum.ownerEmail?.charAt(0)?.toUpperCase() ||
+    "U";
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto px-4 py-10">
+
       {/* HEADER */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <Link to="/social" className="text-sm text-blue-600 underline">← Back</Link>
-          <h1 className="mt-1 text-2xl font-bold">{forum.title}</h1>
-          <p className="text-gray-500">{forum.description || " "}</p>
+      <div className="mb-8 p-6 rounded-xl bg-[#132237] text-white shadow-lg">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">{forum.title}</h1>
+
+          {isOwner && (
+            <button
+              onClick={handleDeleteForum}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-semibold text-sm shadow"
+            >
+              Delete forum
+            </button>
+          )}
         </div>
 
-        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-          {forum.tag}
-        </span>
+        {forum.description && (
+          <p className="mt-2 text-gray-300">{forum.description}</p>
+        )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <div className="h-10 w-10 flex items-center justify-center rounded-full bg-gray-800 text-white font-bold">
+            {initial}
+          </div>
+          <span className="text-gray-300">
+            Created by <strong>{forum.ownerName}</strong>
+          </span>
+        </div>
       </div>
 
-      {/* MESSAGES */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4">
-        <ul className="space-y-3">
-          {messages.map((m) => (
-            <li key={m.id} className="border border-gray-100 rounded-xl px-4 py-3 bg-gray-50">
-              <div className="text-sm text-gray-800">{m.text}</div>
-              <div className="mt-1 text-xs text-gray-500 flex items-center justify-between">
-                <span>{m.name || "User"}</span>
+      {/* MESSAGES LIST */}
+      <div className="space-y-4 mb-8">
+        {messages.length === 0 && (
+          <div className="text-center text-gray-500 py-10">
+            No messages yet. Be the first!
+          </div>
+        )}
 
-                {/* DELETE BUTTON (ONLY ON OWN MESSAGES) */}
-                {m.uid === currentUid && (
-                  <button
-                    onClick={() => handleDelete(m.id)}
-                    className="text-red-600 text-xs hover:underline"
-                  >
-                    Delete
-                  </button>
-                )}
+        {messages.map((m) => {
+          const msgInitial =
+            m.name?.charAt(0)?.toUpperCase() ||
+            m.email?.charAt(0)?.toUpperCase() ||
+            "U";
+
+          const isMyMessage = user?.uid === m.uid;
+
+          return (
+            <div
+              key={m.id}
+              className="relative bg-white border rounded-xl p-4 shadow hover:shadow-md transition"
+            >
+              {/* Delete */}
+              {isMyMessage && (
+                <button
+                  onClick={() => handleDeleteMessage(m.id, m.uid)}
+                  className="absolute top-3 right-3 text-red-600 text-sm hover:underline"
+                >
+                  Delete
+                </button>
+              )}
+
+              <div className="flex items-center gap-3 mb-2">
+                <div className="h-9 w-9 flex items-center justify-center rounded-full bg-[#132237] text-white font-semibold">
+                  {msgInitial}
+                </div>
+                <strong>{m.name}</strong>
               </div>
-            </li>
-          ))}
 
-          {messages.length === 0 && (
-            <li className="text-sm text-gray-500">No messages yet.</li>
-          )}
-        </ul>
-
-        {/* SEND MESSAGE */}
-        <form onSubmit={send} className="mt-4 flex gap-2">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Write a message…"
-            className="flex-1 h-11 rounded-xl border border-gray-300 px-3 outline-none focus:ring-2 focus:ring-blue-400"
-          />
-          <button
-            type="submit"
-            className="h-11 px-5 rounded-xl bg-gray-900 text-white hover:bg-gray-800"
-          >
-            Send
-          </button>
-        </form>
+              <div className="text-gray-800">{m.text}</div>
+            </div>
+          );
+        })}
       </div>
+
+      {/* ADD MESSAGE */}
+      <form onSubmit={handleSend} className="mt-6 p-5 bg-white rounded-xl border shadow">
+        <textarea
+          className="w-full border rounded-xl p-3 h-24 resize-none"
+          placeholder="Write a message…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+
+        <button
+          type="submit"
+          className="mt-3 w-full py-3 bg-[#132237] text-white rounded-xl font-semibold hover:bg-[#0d1828] transition"
+        >
+          Send message
+        </button>
+      </form>
     </div>
   );
 }
