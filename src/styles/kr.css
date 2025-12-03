@@ -1,0 +1,62 @@
+/* src/styles/tailwind.css */
+
+/* src/styles/kr.css */
+
+/* BOTONES */
+.kr-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: 12px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    font-weight: 500;
+    transition: 0.2s;
+}
+
+.kr-btn:hover {
+    background: #f3f4f6;
+}
+
+.kr-btn-primary {
+    background: #122944;
+    color: white;
+}
+
+.kr-btn-primary:hover {
+    background: #0f1f33;
+}
+
+/* CARDS */
+.kr-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+/* SPACING */
+.kr-space-y>*+* {
+    margin-top: 24px;
+}
+
+/* BÁSICOS */
+.kr-mr {
+    margin-right: 8px;
+}
+
+.kr-h2 {
+    font-size: 26px;
+    font-weight: 700;
+}
+
+.kr-h3 {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.kr-muted {
+    color: #6b7280;
+}

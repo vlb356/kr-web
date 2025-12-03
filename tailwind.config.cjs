@@ -1,19 +1,37 @@
-// C:\kr-web\tailwind.config.cjs
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
   theme: {
     extend: {
+      // KR Animations
+      keyframes: {
+        fadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+      },
+      animation: {
+        fadeIn: "fadeIn 0.25s ease-in",
+      },
+
+      // KR brand colors (puedes ajustarlos cuando quieras)
       colors: {
-        "kr-blue": "#0D1B2A",
-        "kr-ivory": "#F6F7F9",
+        krblue: "#1662A6",
+        krorange: "#E96F19",
+        krdark: "#122944",
       },
+
+      // Sombra profesional
       boxShadow: {
-        sm: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        card: "0 4px 20px rgba(0,0,0,0.06)",
       },
-      borderRadius: {
-        xl: "0.75rem",
-        "2xl": "1rem",
+
+      // Tipografías opcionales (si las usas)
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },

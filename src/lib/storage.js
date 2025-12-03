@@ -19,4 +19,3 @@ function upd(key, updater, fallback) {
   return next;
 }
 export default { get, set, upd };
-

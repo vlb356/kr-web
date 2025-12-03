@@ -1,0 +1,25 @@
+/* src/styles/base.css */
+
+/* Importa Inter (opcional, recomendado para KR) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
+/* Reset suavizado */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    font-family: Inter, system-ui, sans-serif;
+    background: #ffffff;
+    color: #111827;
+}
+
+/* KR Brand variables */
+:root {
+    --kr-blue: #1662a6;
+    --kr-orange: #e96f19;
+    --kr-dark: #122944;
+}

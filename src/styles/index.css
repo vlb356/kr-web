@@ -1,0 +1,5 @@
+/* src/styles/index.css */
+
+@import "./tailwind.css";
+@import "./base.css";
+@import "./kr.css";

@@ -14,6 +14,7 @@ import {
   addDoc,
   setDoc,
   doc,
+  deleteDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -204,5 +205,58 @@ export async function addForumMessage(forumId, text) {
   await updateDoc(doc(db, "forums", forumId), {
     posts: increment(1),
     updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteForumMessage(forumId, messageId) {
+  const ref = doc(db, "forums", forumId, "messages", messageId);
+  await deleteDoc(ref);
+}
+
+export async function deleteComment(topicId, commentId) {
+  const ref = doc(db, "topics", topicId, "comments", commentId);
+  await deleteDoc(ref);
+}
+
+export async function deleteForum(forumId) {
+  const forumRef = doc(db, "forums", forumId);
+
+  // Delete messages inside the forum
+  const messagesRef = collection(db, "forums", forumId, "messages");
+  const messagesSnap = await getDocs(messagesRef);
+  const batchDeletes = messagesSnap.docs.map((m) => deleteDoc(m.ref));
+  await Promise.all(batchDeletes);
+
+  // Delete the forum itself
+  await deleteDoc(forumRef);
+}
+
+// ADD comment to a topic
+export async function addComment(topicId, text) {
+  const uid = auth.currentUser?.uid;
+  const name =
+    auth.currentUser?.displayName ||
+    auth.currentUser?.email ||
+    "User";
+
+  if (!uid) throw new Error("Not authenticated");
+
+  await addDoc(collection(db, "topics", topicId, "comments"), {
+    uid,
+    name,
+    text,
+    createdAt: serverTimestamp(),
+  });
+}
+
+// LISTEN to comments inside a topic
+export function listenComments(topicId, callback) {
+  const q = query(
+    collection(db, "topics", topicId, "comments"),
+    orderBy("createdAt", "asc")
+  );
+
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
 }

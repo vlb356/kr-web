@@ -1,5 +1,6 @@
+// src/features/leagues/Leagues.jsx
 import { useEffect, useState } from "react";
-import { db, auth } from "../lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import {
   collection,
   addDoc,
@@ -55,8 +56,10 @@ export default function Leagues() {
       setErrorMsg("Please add a title.");
       return;
     }
+
     try {
       setCreating(true);
+
       await addDoc(collection(db, "leagues"), {
         title: t,
         city: c || null,
@@ -137,10 +140,11 @@ export default function Leagues() {
           </select>
           <button
             disabled={creating}
-            className="rounded-lg bg-gray-900 text-white px-4 py-2 font-medium hover:bg-gray-800 active:scale-[0.99] disabled:opacity-60"
+            className="rounded-lg bg-gray-900 text-white px-4 py-2 font-medium hover:bg-gray-800 disabled:opacity-60"
           >
             {creating ? "Creating…" : "Create"}
           </button>
+
           <input
             value={shortDesc}
             onChange={(e) => setShortDesc(e.target.value)}
@@ -170,8 +174,8 @@ export default function Leagues() {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {leagues.map((lg) => {
-                const badge = (lg.type ?? "League"); // << sin mezclar ?? y ||
-                const lvl = lg.level ?? "All levels"; // << idem
+                const badge = lg.type ?? "League";
+                const lvl = lg.level ?? "All levels";
                 const cityLabel = lg.city ?? "—";
 
                 return (
@@ -191,14 +195,12 @@ export default function Leagues() {
                     <h3 className="mt-2 text-lg font-semibold text-gray-900">
                       {lg.title ?? "Untitled"}
                     </h3>
-                    {lg.description ? (
-                      <p className="mt-1 text-sm text-gray-600">
-                        {lg.description}
-                      </p>
-                    ) : null}
+
+                    {lg.description && (
+                      <p className="mt-1 text-sm text-gray-600">{lg.description}</p>
+                    )}
 
                     <div className="mt-4 flex items-center gap-2">
-                      {/* Usamos <a> para evitar depender del Router */}
                       <a
                         href={`#/league/${lg.id}`}
                         className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
@@ -207,8 +209,8 @@ export default function Leagues() {
                       </a>
                       <button
                         type="button"
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
                         onClick={() => alert("Join coming soon")}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-50"
                       >
                         Join
                       </button>
@@ -223,4 +225,3 @@ export default function Leagues() {
     </div>
   );
 }
-

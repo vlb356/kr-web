@@ -1,9 +1,11 @@
+// src/features/events/Events.jsx
 import React, { useEffect, useState } from "react";
-import { addEvent, joinEvent, leaveEvent, listenEvents, auth } from "../lib/firebase";
+import { addEvent, joinEvent, leaveEvent, listenEvents, auth } from "@/lib/firebase";
 
 export default function Events({ user, sub }) {
   const [events, setEvents] = useState([]);
   const [form, setForm] = useState({ title: "", venue: "", date: "", capacity: 10 });
+
   const canCreate = !!user && sub?.active;
 
   useEffect(() => {
@@ -15,6 +17,7 @@ export default function Events({ user, sub }) {
     e.preventDefault();
     if (!canCreate) return;
     if (!form.title.trim() || !form.venue.trim()) return;
+
     await addEvent({ ...form, ownerUid: user?.uid });
     setForm({ title: "", venue: "", date: "", capacity: 10 });
   }
@@ -33,6 +36,7 @@ export default function Events({ user, sub }) {
               Create games, book courts and join local events.
             </p>
           </div>
+
           <div>
             {sub?.active ? (
               <span className="kr-badge-ok">Subscribed</span>
@@ -116,7 +120,6 @@ export default function Events({ user, sub }) {
                     "kr-badge",
                     left === 0 ? "border-red-300 text-red-700 bg-red-50" : "border-gray-300"
                   )}
-                  title="Slots left"
                 >
                   {left} left
                 </span>
@@ -157,5 +160,7 @@ export default function Events({ user, sub }) {
   );
 }
 
-// util local
-function cx(...c) { return c.filter(Boolean).join(" "); }
+// local util
+function cx(...c) {
+  return c.filter(Boolean).join(" ");
+}
