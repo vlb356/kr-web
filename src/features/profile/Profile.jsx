@@ -1,113 +1,137 @@
 // src/features/profile/Profile.jsx
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
 import useAuth from "@/hooks/useAuth";
 
 export default function Profile() {
-  const { uid } = useParams();
-  const { user: current } = useAuth();
+  const { id } = useParams();
+  const { user } = useAuth();
 
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // === LOAD USER PROFILE ===
   useEffect(() => {
-    async function loadProfile() {
-      try {
-        const snap = await getDoc(doc(db, "users", uid));
-        if (snap.exists()) {
-          setProfile({ id: snap.id, ...snap.data() });
-        }
-      } catch (err) {
-        console.error("Profile error:", err);
-      }
-      setLoading(false);
-    }
     loadProfile();
-  }, [uid]);
+    loadPosts();
+  }, [id]);
 
-  if (loading)
-    return (
-      <div className="flex justify-center py-20 text-gray-500">Loading…</div>
+  async function loadProfile() {
+    const ref = doc(db, "users", id);
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      setProfile(snap.data());
+
+      // followers
+      const followersRef = collection(db, "users", id, "followers");
+      const followersSnap = await getDocs(followersRef);
+      setFollowers(followersSnap.size);
+
+      // following
+      const followingRef = collection(db, "users", id, "following");
+      const followingSnap = await getDocs(followingRef);
+      setFollowing(followingSnap.size);
+    }
+    setLoading(false);
+  }
+
+  async function loadPosts() {
+    const qy = query(
+      collection(db, "forums"),
+      where("ownerUid", "==", id)
     );
 
-  if (!profile)
-    return (
-      <div className="flex flex-col items-center py-20">
-        <h2 className="text-xl font-semibold">User not found</h2>
-        <p className="text-gray-600 mt-2">This profile doesn't exist.</p>
-      </div>
-    );
+    const snap = await getDocs(qy);
+    setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
 
-  const isOwner = current?.uid === uid;
+  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (!profile) return <div className="p-10 text-center text-xl">User not found.</div>;
+
+  const initial =
+    profile?.name?.charAt(0).toUpperCase() ||
+    profile?.email?.charAt(0).toUpperCase() ||
+    "U";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
-      {/* ====================== HEADER CARD ====================== */}
-      <div className="kr-card p-8 flex flex-col md:flex-row items-center md:items-start gap-6">
-        {/* Avatar */}
-        <div className="h-32 w-32 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 text-white flex items-center justify-center text-4xl font-bold shadow-lg">
-          {profile.name?.charAt(0).toUpperCase()}
+    <div className="max-w-5xl mx-auto px-6 py-10">
+
+      {/* HEADER CARD */}
+      <div className="bg-[#122944] text-white rounded-2xl p-8 shadow-md flex items-center gap-6">
+        <div className="h-24 w-24 rounded-full flex items-center justify-center text-4xl font-bold bg-[#1662A6]">
+          {initial}
         </div>
 
-        {/* Info */}
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{profile.name}</h1>
+        <div>
+          <h2 className="text-2xl font-semibold">{profile.name}</h2>
+          <p className="opacity-80">{profile.email}</p>
 
-          <p className="text-gray-600 mt-1">{profile.email}</p>
-
-          {profile.subscription?.active ? (
-            <div className="mt-3 inline-block bg-green-100 text-green-700 px-4 py-1 rounded-full text-sm font-medium">
-              Active plan: {profile.subscription.plan}
-            </div>
-          ) : (
-            <div className="mt-3 inline-block bg-red-100 text-red-700 px-4 py-1 rounded-full text-sm font-medium">
-              No subscription
-            </div>
+          {profile.subscription?.active && (
+            <span className="inline-block mt-3 px-3 py-1 text-sm bg-[#E96F19] text-white rounded-full">
+              ACTIVE: {profile.subscription.plan}
+            </span>
           )}
 
-          {isOwner && (
-            <a
-              href="#/settings"
-              className="inline-block mt-4 text-sm text-blue-600 font-medium underline"
-            >
+          {/* Bio */}
+          {profile.bio && (
+            <p className="mt-4 text-gray-200 text-sm max-w-lg leading-relaxed">
+              {profile.bio}
+            </p>
+          )}
+
+          {user?.uid === id && (
+            <a href="#/edit-profile" className="block mt-4 text-[#E96F19] underline text-sm">
               Edit profile
             </a>
           )}
         </div>
       </div>
 
-      {/* ====================== STATS ROW ====================== */}
-      <div className="grid grid-cols-3 gap-4 mt-8">
-        <StatCard label="Posts" value={profile.posts || 0} />
-        <StatCard label="Events joined" value={profile.events || 0} />
-        <StatCard label="Leagues" value={profile.leagues || 0} />
+      {/* STATS */}
+      <div className="grid grid-cols-3 gap-6 mt-10 text-center">
+        <StatCard number={followers} label="Followers" color="#1662A6" />
+        <StatCard number={following} label="Following" color="#E96F19" />
+        <StatCard number={posts.length} label="Posts" color="#122944" />
       </div>
 
-      {/* ====================== RECENT ACTIVITY ====================== */}
-      <div className="mt-10">
-        <h2 className="text-xl font-semibold mb-4">Recent activity</h2>
+      {/* POSTS */}
+      <div className="mt-12">
+        <h3 className="text-xl font-semibold mb-4">Recent Posts</h3>
 
-        <div className="kr-card p-6">
-          <p className="text-gray-500 text-sm">
-            No recent activity yet. Join events and comment on forums to see
-            updates here.
-          </p>
-        </div>
+        {posts.length === 0 ? (
+          <p className="text-gray-500">This user hasn’t posted anything yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {posts.map((p) => (
+              <a
+                key={p.id}
+                href={`#/forum/${p.id}`}
+                className="block p-4 border rounded-xl hover:bg-gray-50 transition"
+              >
+                <h4 className="font-semibold text-[#122944]">{p.title}</h4>
+                <p className="text-gray-600 text-sm">{p.description}</p>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ========================= SUB-COMPONENT ========================= */
-function StatCard({ label, value }) {
+function StatCard({ number, label, color }) {
   return (
-    <div className="kr-card p-5 text-center shadow-sm">
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-      <p className="text-gray-600 text-sm mt-1">{label}</p>
+    <div
+      className="rounded-xl py-6 shadow text-white"
+      style={{ backgroundColor: color }}
+    >
+      <div className="text-3xl font-bold">{number}</div>
+      <div className="text-sm opacity-80">{label}</div>
     </div>
   );
 }

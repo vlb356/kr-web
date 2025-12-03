@@ -46,17 +46,26 @@ export const storage = getStorage(app);
 // -------- Auth --------
 export const onAuthChanged = (cb) => onAuthStateChanged(auth, cb);
 
-export async function registerEmailPassword(name, email, password) {
+export async function registerEmailPassword(username, email, password) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  if (name) await updateProfile(cred.user, { displayName: name });
+
+  // nombre visible obligatorio
+  await updateProfile(cred.user, { displayName: username });
+
   await setDoc(doc(db, "users", cred.user.uid), {
     email,
-    name: name || email,
+    name: username,
+    avatarUrl: null,
+    bio: "",
+    followers: [],
+    following: [],
     createdAt: serverTimestamp(),
     subscription: { active: true, plan: "one-pass" }
   });
+
   return cred.user;
 }
+
 export async function loginEmailPassword(email, password) {
   const { user } = await signInWithEmailAndPassword(auth, email, password);
   return user;
@@ -193,20 +202,44 @@ export function listenForumMessages(forumId, cb, onError) {
     }
   );
 }
+
 export async function addForumMessage(forumId, text) {
   const uid = auth.currentUser?.uid;
-  const name = auth.currentUser?.displayName || auth.currentUser?.email || "User";
+  const name =
+    auth.currentUser?.displayName ||
+    auth.currentUser?.email ||
+    "User";
+
   if (!uid) throw new Error("Please sign in first");
 
-  await addDoc(collection(db, "forums", forumId, "messages"), {
-    text, uid, name, createdAt: serverTimestamp(),
+  // 1) Crear mensaje en el foro
+  const ref = await addDoc(collection(db, "forums", forumId, "messages"), {
+    text,
+    uid,
+    name,
+    createdAt: serverTimestamp(),
   });
 
+  // 2) Incrementar posts del foro
   await updateDoc(doc(db, "forums", forumId), {
     posts: increment(1),
     updatedAt: serverTimestamp(),
   });
+
+  // 3) Registrar el post dentro del usuario
+  await addDoc(collection(db, "users", uid, "posts"), {
+    forumId,
+    messageId: ref.id,
+    text,
+    createdAt: serverTimestamp(),
+  });
+
+  // 4) Aumentar contador general del usuario
+  await updateDoc(doc(db, "users", uid), {
+    posts: increment(1)
+  });
 }
+
 
 // Borrar mensaje de foro y decrementar contador de posts
 export async function deleteForumMessage(forumId, msgId) {
@@ -268,3 +301,59 @@ export function listenComments(topicId, callback) {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
 }
+
+// Follow user
+export async function followUser(targetUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
+
+  if (me === targetUid) throw new Error("You cannot follow yourself");
+
+  // Add to MY "following"
+  await setDoc(doc(db, "users", me, "following", targetUid), {
+    uid: targetUid,
+    createdAt: serverTimestamp(),
+  });
+
+  // Add to THEIR "followers"
+  await setDoc(doc(db, "users", targetUid, "followers", me), {
+    uid: me,
+    createdAt: serverTimestamp(),
+  });
+}
+
+// Unfollow user
+export async function unfollowUser(targetUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
+
+  await deleteDoc(doc(db, "users", me, "following", targetUid));
+  await deleteDoc(doc(db, "users", targetUid, "followers", me));
+}
+
+// Listen to followers count
+export function listenFollowers(uid, callback) {
+  const ref = collection(db, "users", uid, "followers");
+  return onSnapshot(ref, snap => {
+    callback(snap.docs.length);
+  });
+}
+
+// Listen to following count
+export function listenFollowing(uid, callback) {
+  const ref = collection(db, "users", uid, "following");
+  return onSnapshot(ref, snap => {
+    callback(snap.docs.length);
+  });
+}
+
+// Check if current user follows a given user
+export async function isFollowing(targetUid) {
+  const me = auth.currentUser?.uid;
+  if (!me) return false;
+
+  const ref = doc(db, "users", me, "following", targetUid);
+  const snap = await getDoc(ref);
+  return snap.exists();
+}
+
