@@ -54,7 +54,7 @@ export default function Subscriptions() {
         <PlanCard
           name="Annual"
           price="119.99€"
-          desc="Best value · Full platform access"
+          desc="Best option saving money · Full platform access"
           active={sub?.plan === "ANNUAL"}
           disabled={!user}
           onClick={() => choose("ANNUAL")}

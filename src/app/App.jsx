@@ -5,20 +5,33 @@ import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import Nav from "@/components/nav/Nav";
 import ProtectedRoute from "@/components/access/ProtectedRoute";
 
+// Public
 import Marketing from "@/features/marketing/Marketing";
 import Explore from "@/features/explore/Explore";
-import Events from "@/features/events/Events";
-import CreateEvent from "@/features/events/CreateEvent";
-import Leagues from "@/features/leagues/Leagues";
-import Social from "@/features/social/Social";
-
 import Subscriptions from "@/features/subscriptions/Subscriptions";
-
 import Auth from "@/features/auth/Auth";
+
+// Profile
 import Profile from "@/features/profile/Profile";
 import EditProfile from "@/features/profile/EditProfile";
-import ForumDetail from "@/features/social/ForumDetail";
 import SearchUsers from "@/features/profile/SearchUsers";
+
+// Events
+import Events from "@/features/events/Events";
+import CreateEvent from "@/features/events/CreateEvent";
+
+// Social
+import Social from "@/features/social/Social";
+import ForumDetail from "@/features/social/ForumDetail";
+
+// --- LEAGUES ---
+import Leagues from "@/features/leagues/Leagues";
+import CreateLeague from "@/features/leagues/CreateLeague";
+import MyLeagues from "@/features/leagues/MyLeagues";
+import AllLeagues from "@/features/leagues/AllLeagues";
+import LeagueDetail from "@/features/leagues/LeagueDetail";
+
+
 
 export default function App() {
   return (
@@ -28,43 +41,34 @@ export default function App() {
 
         <main className="flex-1">
           <Routes>
-            {/* Public */}
+
+            {/* PUBLIC */}
             <Route path="/" element={<Marketing />} />
             <Route path="/explore" element={<Explore />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/auth" element={<Auth />} />
 
-            {/* Protected */}
-            <Route path="/profile/:id" element={
-              <ProtectedRoute><Profile /></ProtectedRoute>
-            } />
+            {/* PROFILE */}
+            <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
+            <Route path="/search" element={<ProtectedRoute><SearchUsers /></ProtectedRoute>} />
 
-            <Route path="/edit-profile" element={
-              <ProtectedRoute><EditProfile /></ProtectedRoute>
-            } />
+            {/* EVENTS */}
+            <Route path="/events" element={<ProtectedRoute><Events /></ProtectedRoute>} />
+            <Route path="/create-event" element={<ProtectedRoute><CreateEvent /></ProtectedRoute>} />
 
-            <Route path="/search" element={
-              <ProtectedRoute><SearchUsers /></ProtectedRoute>
-            } />
+            {/* LEAGUES */}
+            <Route path="/leagues" element={<Leagues />} />
+            <Route path="/create-league" element={<CreateLeague />} />
+            <Route path="/my-leagues" element={<MyLeagues />} />
+            <Route path="/all-leagues" element={<AllLeagues />} />
+            <Route path="/league/:id" element={<LeagueDetail />} />
 
-            <Route path="/events" element={
-              <ProtectedRoute><Events /></ProtectedRoute>
-            } />
+            {/* SOCIAL */}
+            <Route path="/social" element={<ProtectedRoute><Social /></ProtectedRoute>} />
+            <Route path="/forum/:id" element={<ProtectedRoute><ForumDetail /></ProtectedRoute>} />
 
-            <Route path="/create-event" element={
-              <ProtectedRoute><CreateEvent /></ProtectedRoute>
-            } />
-
-
-            <Route path="/social" element={
-              <ProtectedRoute><Social /></ProtectedRoute>
-            } />
-
-            <Route path="/forum/:id" element={
-              <ProtectedRoute><ForumDetail /></ProtectedRoute>
-            } />
-
-            {/* Not found */}
+            {/* NOT FOUND */}
             <Route
               path="*"
               element={

@@ -15,7 +15,7 @@ export default function Marketing() {
         </p>
 
         <a
-          href="#/subscribe"
+          href="#/subscriptions"
           className="mt-6 inline-block kr-btn-primary px-8 py-3 text-lg rounded-xl"
         >
           Get One Pass
@@ -47,7 +47,7 @@ export default function Marketing() {
           </p>
 
           <a
-            href="#/subscribe"
+            href="#/subscriptions"
             className="mt-8 inline-block kr-btn-white px-8 py-3 text-lg rounded-xl"
           >
             Subscribe

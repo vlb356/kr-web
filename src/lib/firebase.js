@@ -20,6 +20,7 @@ import {
   updateDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
   serverTimestamp,
   arrayUnion,
@@ -366,3 +367,124 @@ export async function isFollowing(targetUid) {
   return snap.exists();
 }
 
+// --------------------------
+// LEAGUES
+// --------------------------
+
+export async function addLeague(data) {
+  const ref = await addDoc(collection(db, "leagues"), {
+    ...data,
+    createdAt: serverTimestamp(),
+    teams: [],
+    matches: [],
+    standings: [],
+    participants: []
+  });
+
+  return ref.id;
+}
+
+// -------------------------------
+// DELETE LEAGUE (FULL)
+// -------------------------------
+export async function deleteLeague(leagueId, ownerUid) {
+  const current = auth.currentUser?.uid;
+
+  if (!current) throw new Error("Not authenticated");
+  if (current !== ownerUid) throw new Error("Only the owner can delete this league");
+
+  // 1) DELETE TEAMS SUBCOLLECTION
+  const teamsRef = collection(db, "leagues", leagueId, "teams");
+  const teamsSnap = await getDocs(teamsRef);
+  const teamDeletes = teamsSnap.docs.map((d) => deleteDoc(d.ref));
+
+  await Promise.all(teamDeletes);
+
+  // 2) DELETE MATCHES SUBCOLLECTION
+  const matchesRef = collection(db, "leagues", leagueId, "matches");
+  const matchesSnap = await getDocs(matchesRef);
+  const matchDeletes = matchesSnap.docs.map((d) => deleteDoc(d.ref));
+
+  await Promise.all(matchDeletes);
+
+  // 3) DELETE THE LEAGUE DOCUMENT ITSELF
+  await deleteDoc(doc(db, "leagues", leagueId));
+}
+
+
+// -------------------------------
+// TEAMS
+// -------------------------------
+export async function createTeam(leagueId, { name }) {
+  const ref = await addDoc(collection(db, "leagues", leagueId, "teams"), {
+    name,
+    members: [],
+    createdAt: serverTimestamp()
+  });
+
+  // Update counter
+  await updateDoc(doc(db, "leagues", leagueId), {
+    teamCount: increment(1)
+  });
+
+  return ref.id;
+}
+
+export async function deleteTeam(leagueId, teamId) {
+  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId));
+  await updateDoc(doc(db, "leagues", leagueId), { teamCount: increment(-1) });
+}
+
+
+// -------------------------------
+// MATCHES
+// -------------------------------
+export async function createMatch(leagueId, data) {
+  await addDoc(collection(db, "leagues", leagueId, "matches"), {
+    ...data,
+    createdAt: serverTimestamp()
+  });
+}
+
+export async function updateMatch(leagueId, matchId, data) {
+  await updateDoc(doc(db, "leagues", leagueId, "matches", matchId), data);
+}
+
+
+// -------------------------------
+// JOIN / LEAVE LEAGUE
+// -------------------------------
+export async function joinLeague(leagueId) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Not authenticated");
+
+  await updateDoc(doc(db, "leagues", leagueId), {
+    participants: arrayUnion(uid)
+  });
+}
+
+export async function leaveLeague(leagueId) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Not authenticated");
+
+  await updateDoc(doc(db, "leagues", leagueId), {
+    participants: arrayRemove(uid)
+  });
+}
+
+export {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  updateDoc,
+  addDoc,
+  deleteDoc,
+  where,
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  increment
+};

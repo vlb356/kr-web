@@ -152,3 +152,20 @@
     background: #fee2e2;
     color: #991b1b;
 }
+
+/* INPUTS */
+.kr-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 15px;
+    transition: 0.2s;
+}
+
+.kr-input:focus {
+    outline: none;
+    border-color: #1662A6;
+    box-shadow: 0 0 0 2px rgba(22, 98, 166, 0.2);
+}
