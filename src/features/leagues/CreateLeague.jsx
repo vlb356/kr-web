@@ -1,143 +1,158 @@
-// src/features/leagues/CreateLeague.jsx
 import React, { useState } from "react";
-import { addLeague } from "@/lib/firebase";
-import useAuth from "@/hooks/useAuth";
+import { createLeague } from "@/lib/firebase";
+import { sha256 } from "@/lib/hash";
+import { useNavigate } from "react-router-dom";
+import { Container } from "@/components/ui";
 
 export default function CreateLeague() {
-    const { user } = useAuth();
+    const navigate = useNavigate();
 
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
-    const [sport, setSport] = useState("Football");
-    const [format, setFormat] = useState("5v5");
+    const [name, setName] = useState("");
+    const [sport, setSport] = useState("");
+    const [format, setFormat] = useState("");
     const [venue, setVenue] = useState("");
+
     const [visibility, setVisibility] = useState("public");
+    const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
 
     async function handleSubmit(e) {
         e.preventDefault();
-        if (!user) return alert("You must be logged in.");
+        setLoading(true);
 
-        try {
-            const id = await addLeague({
-                title,
-                description,
-                sport,
-                format,
-                venue,
-                visibility,
-                ownerUid: user.uid,
-                ownerName: user.displayName || user.email
-            });
+        let passwordHash = null;
 
-            window.location.hash = `#/league/${id}`;
-        } catch (err) {
-            console.error(err);
-            alert(err.message);
+        if (visibility === "private") {
+            if (!password) {
+                alert("Please enter a password for a private league.");
+                setLoading(false);
+                return;
+            }
+            passwordHash = await sha256(password);
         }
+
+        const leagueId = await createLeague({
+            name,
+            sport,
+            format,
+            venue,
+            visibility,
+            passwordHash,
+        });
+
+        navigate(`/league/${leagueId}`);
     }
 
     return (
-        <div className="max-w-3xl mx-auto px-6 py-10">
+        <Container className="py-12 flex justify-center">
+            <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border">
 
-            {/* Back button */}
-            <button
-                onClick={() => window.history.back()}
-                className="text-[#1662A6] font-medium mb-6"
-            >
-                ← Back
-            </button>
-
-            <h1 className="text-4xl font-bold text-[#122944] mb-8">Create League</h1>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-
-                {/* Title */}
-                <div>
-                    <label className="block font-semibold mb-1">League Name</label>
-                    <input
-                        type="text"
-                        className="w-full border rounded-xl p-3"
-                        placeholder="Example: Premier League"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        required
-                    />
-                </div>
-
-                {/* Description */}
-                <div>
-                    <label className="block font-semibold mb-1">Description</label>
-                    <textarea
-                        className="w-full border rounded-xl p-3"
-                        placeholder="Write a short description..."
-                        rows={3}
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                    />
-                </div>
-
-                {/* Sport */}
-                <div>
-                    <label className="block font-semibold mb-1">Sport</label>
-                    <select
-                        className="w-full border rounded-xl p-3"
-                        value={sport}
-                        onChange={(e) => setSport(e.target.value)}
-                    >
-                        <option>Football</option>
-                        <option>Basketball</option>
-                        <option>Paddle</option>
-                        <option>Tennis</option>
-                        <option>Volleyball</option>
-                    </select>
-                </div>
-
-                {/* Format */}
-                <div>
-                    <label className="block font-semibold mb-1">Format</label>
-                    <select
-                        className="w-full border rounded-xl p-3"
-                        value={format}
-                        onChange={(e) => setFormat(e.target.value)}
-                    >
-                        <option>1v1</option>
-                        <option>3v3</option>
-                        <option>5v5</option>
-                        <option>7v7</option>
-                    </select>
-                </div>
-
-                {/* Venue */}
-                <div>
-                    <label className="block font-semibold mb-1">Venue</label>
-                    <input
-                        type="text"
-                        className="w-full border rounded-xl p-3"
-                        placeholder="Example: Kaunas Arena"
-                        value={venue}
-                        onChange={(e) => setVenue(e.target.value)}
-                    />
-                </div>
-
-                {/* Visibility */}
-                <div>
-                    <label className="block font-semibold mb-1">Visibility</label>
-                    <select
-                        className="w-full border rounded-xl p-3"
-                        value={visibility}
-                        onChange={(e) => setVisibility(e.target.value)}
-                    >
-                        <option value="public">Public</option>
-                        <option value="private">Private</option>
-                    </select>
-                </div>
-
-                {/* BUTTON */}
-                <button className="w-full bg-[#E96F19] text-white py-3 rounded-xl text-lg font-semibold">
+                <h1 className="text-3xl font-bold text-center mb-6 text-[#122944]">
                     Create League
+                </h1>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+
+                    {/* NAME */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">League Name</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full border p-3 rounded-lg"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Example: Kaunas Basketball League"
+                        />
+                    </div>
+
+                    {/* SPORT */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Sport</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full border p-3 rounded-lg"
+                            value={sport}
+                            onChange={(e) => setSport(e.target.value)}
+                            placeholder="Basketball, Football, Padel..."
+                        />
+                    </div>
+
+                    {/* FORMAT */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Format</label>
+                        <input
+                            type="text"
+                            className="w-full border p-3 rounded-lg"
+                            value={format}
+                            onChange={(e) => setFormat(e.target.value)}
+                            placeholder="Round Robin, Knockout, Mixed..."
+                        />
+                    </div>
+
+                    {/* VENUE */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Venue / Location</label>
+                        <input
+                            type="text"
+                            className="w-full border p-3 rounded-lg"
+                            value={venue}
+                            onChange={(e) => setVenue(e.target.value)}
+                            placeholder="Gym, Stadium, Sport Hall..."
+                        />
+                    </div>
+
+                    {/* VISIBILITY */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Visibility</label>
+
+                        <select
+                            value={visibility}
+                            onChange={(e) => setVisibility(e.target.value)}
+                            className="w-full border p-3 rounded-lg"
+                        >
+                            <option value="public">🌐 Public (open to all)</option>
+                            <option value="private">🔒 Private (password required)</option>
+                        </select>
+                    </div>
+
+                    {/* PASSWORD → only if private */}
+                    {visibility === "private" && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Password</label>
+                            <input
+                                type="password"
+                                required
+                                className="w-full border p-3 rounded-lg"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter a league password"
+                            />
+                        </div>
+                    )}
+
+                    {/* BUTTONS */}
+                    <div className="pt-2">
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-[#1662A6] text-white p-3 rounded-lg text-lg font-semibold hover:bg-[#124f84] transition disabled:opacity-50"
+                        >
+                            {loading ? "Creating..." : "Create League"}
+                        </button>
+                    </div>
+                </form>
+
+                {/* BACK BUTTON */}
+                <button
+                    onClick={() => navigate("/leagues")}
+                    className="mt-6 text-[#1662A6] text-center w-full hover:underline"
+                >
+                    ← Back to Leagues
                 </button>
 
-            </form>
-        </div>
+            </div>
+        </Container>
     );
 }

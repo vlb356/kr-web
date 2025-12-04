@@ -1,4 +1,6 @@
-// Firebase v9 modular — foro + eventos
+// ----------------------------------------------------
+//  Firebase v9 Modular — Komanda Ryšys (Full Version)
+// ----------------------------------------------------
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -8,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile,
 } from "firebase/auth";
+
 import {
   getFirestore,
   collection,
@@ -28,8 +31,12 @@ import {
   runTransaction,
   increment,
 } from "firebase/firestore";
+
 import { getStorage } from "firebase/storage";
 
+// ----------------------------------------------------
+//  Firebase Init
+// ----------------------------------------------------
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -44,13 +51,13 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// -------- Auth --------
+// ----------------------------------------------------
+//  AUTH
+// ----------------------------------------------------
 export const onAuthChanged = (cb) => onAuthStateChanged(auth, cb);
 
 export async function registerEmailPassword(username, email, password) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-
-  // nombre visible obligatorio
   await updateProfile(cred.user, { displayName: username });
 
   await setDoc(doc(db, "users", cred.user.uid), {
@@ -61,7 +68,7 @@ export async function registerEmailPassword(username, email, password) {
     followers: [],
     following: [],
     createdAt: serverTimestamp(),
-    subscription: { active: true, plan: "one-pass" }
+    subscription: { active: true, plan: "one-pass" },
   });
 
   return cred.user;
@@ -71,11 +78,15 @@ export async function loginEmailPassword(email, password) {
   const { user } = await signInWithEmailAndPassword(auth, email, password);
   return user;
 }
-export async function logout() { await signOut(auth); }
+
+export async function logout() {
+  await signOut(auth);
+}
 
 export async function ensureUserDoc(uid) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
+
   if (!snap.exists()) {
     await setDoc(ref, {
       email: auth.currentUser?.email || "",
@@ -85,17 +96,19 @@ export async function ensureUserDoc(uid) {
     });
   }
 }
+
 export async function getUserProfile(uid) {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
   return snap.exists() ? snap.data() : null;
 }
 
-// -------- Subscripción --------
+// ----------------------------------------------------
+//  SUBSCRIPTIONS
+// ----------------------------------------------------
 export async function setSubscriptionPlan(uid, plan) {
-  const ref = doc(db, "users", uid);
   await setDoc(
-    ref,
+    doc(db, "users", uid),
     {
       subscription: {
         active: !!plan,
@@ -107,78 +120,80 @@ export async function setSubscriptionPlan(uid, plan) {
   );
 }
 
-// -------- Events --------
+// ----------------------------------------------------
+//  EVENTS
+// ----------------------------------------------------
 export function listenEvents(cb) {
   const qy = query(collection(db, "events"), orderBy("date", "asc"));
   return onSnapshot(qy, (snap) =>
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   );
 }
+
 export async function addEvent({ title, venue, date, capacity = 10, ownerUid }) {
   await addDoc(collection(db, "events"), {
-    title, venue, date: date || "", capacity: Number(capacity) || 10,
-    attendees: [], ownerUid: ownerUid || auth.currentUser?.uid || null,
+    title,
+    venue,
+    date: date || "",
+    capacity: Number(capacity) || 10,
+    attendees: [],
+    ownerUid: ownerUid || auth.currentUser?.uid || null,
     createdAt: serverTimestamp(),
   });
 }
+
 export async function joinEvent(eventId, uid) {
   const ref = doc(db, "events", eventId);
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Event not found");
+
     const data = snap.data();
     const attendees = data.attendees || [];
+
     if (attendees.includes(uid)) return;
-    if (data.capacity && attendees.length >= data.capacity) {
+
+    if (data.capacity && attendees.length >= data.capacity)
       throw new Error("Event is full");
-    }
+
     tx.update(ref, { attendees: arrayUnion(uid) });
   });
 }
+
 export async function leaveEvent(eventId, uid) {
-  const ref = doc(db, "events", eventId);
-  await updateDoc(ref, { attendees: arrayRemove(uid) });
+  await updateDoc(doc(db, "events", eventId), {
+    attendees: arrayRemove(uid),
+  });
 }
 
-// DELETE EVENT (only owner)
 export async function deleteEvent(eventId, ownerUid) {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error("Not authenticated");
-
-  if (me !== ownerUid) {
-    throw new Error("Only the event owner can delete this event");
-  }
+  if (me !== ownerUid) throw new Error("Only the owner can delete this event");
 
   await deleteDoc(doc(db, "events", eventId));
 }
 
-
-// --- FORUMS ---
-
-// LISTEN FORUMS
+// ----------------------------------------------------
+//  FORUMS
+// ----------------------------------------------------
 export function listenForums(onData, onError) {
   const qy = query(collection(db, "forums"), orderBy("updatedAt", "desc"));
+
   return onSnapshot(
     qy,
-    (snap) => {
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      onData(rows);
-    },
-    (err) => {
-      console.error("[listenForums] error:", err);
-      if (onError) onError(err);
-    }
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => onError?.(err)
   );
 }
 
-// GET FORUMS ONCE (NECESARIO PARA Social.jsx)
 export async function getForumsOnce() {
-  const qy = query(collection(db, "forums"), orderBy("updatedAt", "desc"));
-  const snap = await getDocs(qy);
+  const snap = await getDocs(
+    query(collection(db, "forums"), orderBy("updatedAt", "desc"))
+  );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-// CREATE FORUM (¡¡CORREGIDO!!)
 export async function addForum({ title, description = "", tag = "general", ownerUid }) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Not authenticated");
@@ -198,30 +213,24 @@ export async function addForum({ title, description = "", tag = "general", owner
   return ref.id;
 }
 
-// GET A FORUM
 export async function getForum(forumId) {
-  const ref = doc(db, "forums", forumId);
-  const snap = await getDoc(ref);
+  const snap = await getDoc(doc(db, "forums", forumId));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-// LISTEN MESSAGES
 export function listenForumMessages(forumId, cb, onError) {
   const qy = query(
     collection(db, "forums", forumId, "messages"),
     orderBy("createdAt", "asc")
   );
+
   return onSnapshot(
     qy,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-    (err) => {
-      console.error("[listenForumMessages] error:", err);
-      onError?.(err);
-    }
+    (err) => onError?.(err)
   );
 }
 
-// CREATE MESSAGE
 export async function addForumMessage(forumId, text) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Please sign in first");
@@ -242,16 +251,11 @@ export async function addForumMessage(forumId, text) {
   });
 }
 
-
-// DELETE A MESSAGE
 export async function deleteForumMessage(forumId, msgId, msgOwnerUid) {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error("Not authenticated");
-
-  // Seguridad frontend (Firestore ya valida también)
-  if (me !== msgOwnerUid) {
+  if (me !== msgOwnerUid)
     throw new Error("You can only delete your own messages");
-  }
 
   await deleteDoc(doc(db, "forums", forumId, "messages", msgId));
 
@@ -261,78 +265,36 @@ export async function deleteForumMessage(forumId, msgId, msgOwnerUid) {
   });
 }
 
-
-// DELETE A FORUM
-export async function deleteForum(forumId, forumOwnerUid) {
+export async function deleteForum(forumId, ownerUid) {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error("Not authenticated");
+  if (me !== ownerUid) throw new Error("Only the owner can delete this forum");
 
-  if (me !== forumOwnerUid) {
-    throw new Error("Only the owner can delete this forum");
-  }
-
-  const messagesRef = collection(db, "forums", forumId, "messages");
-  const snap = await getDocs(messagesRef);
-
-  // Borrado en paralelo
-  const deletions = snap.docs.map((m) => deleteDoc(m.ref));
-  await Promise.all(deletions);
+  const messages = await getDocs(collection(db, "forums", forumId, "messages"));
+  await Promise.all(messages.docs.map((m) => deleteDoc(m.ref)));
 
   await deleteDoc(doc(db, "forums", forumId));
 }
 
-
-// ADD comment to a topic
-export async function addComment(topicId, text) {
-  const uid = auth.currentUser?.uid;
-  const name =
-    auth.currentUser?.displayName ||
-    auth.currentUser?.email ||
-    "User";
-
-  if (!uid) throw new Error("Not authenticated");
-
-  await addDoc(collection(db, "topics", topicId, "comments"), {
-    uid,
-    name,
-    text,
-    createdAt: serverTimestamp(),
-  });
-}
-
-// LISTEN to comments inside a topic
-export function listenComments(topicId, callback) {
-  const q = query(
-    collection(db, "topics", topicId, "comments"),
-    orderBy("createdAt", "asc")
-  );
-
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
-}
-
-// Follow user
+// ----------------------------------------------------
+//  FOLLOW SYSTEM
+// ----------------------------------------------------
 export async function followUser(targetUid) {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error("Not authenticated");
-
   if (me === targetUid) throw new Error("You cannot follow yourself");
 
-  // Add to MY "following"
   await setDoc(doc(db, "users", me, "following", targetUid), {
     uid: targetUid,
     createdAt: serverTimestamp(),
   });
 
-  // Add to THEIR "followers"
   await setDoc(doc(db, "users", targetUid, "followers", me), {
     uid: me,
     createdAt: serverTimestamp(),
   });
 }
 
-// Unfollow user
 export async function unfollowUser(targetUid) {
   const me = auth.currentUser?.uid;
   if (!me) throw new Error("Not authenticated");
@@ -341,125 +303,61 @@ export async function unfollowUser(targetUid) {
   await deleteDoc(doc(db, "users", targetUid, "followers", me));
 }
 
-// Listen to followers count
-export function listenFollowers(uid, callback) {
-  const ref = collection(db, "users", uid, "followers");
-  return onSnapshot(ref, snap => {
-    callback(snap.docs.length);
-  });
+export function listenFollowers(uid, cb) {
+  return onSnapshot(collection(db, "users", uid, "followers"), (snap) =>
+    cb(snap.docs.length)
+  );
 }
 
-// Listen to following count
-export function listenFollowing(uid, callback) {
-  const ref = collection(db, "users", uid, "following");
-  return onSnapshot(ref, snap => {
-    callback(snap.docs.length);
-  });
+export function listenFollowing(uid, cb) {
+  return onSnapshot(collection(db, "users", uid, "following"), (snap) =>
+    cb(snap.docs.length)
+  );
 }
 
-// Check if current user follows a given user
 export async function isFollowing(targetUid) {
   const me = auth.currentUser?.uid;
   if (!me) return false;
 
-  const ref = doc(db, "users", me, "following", targetUid);
-  const snap = await getDoc(ref);
+  const snap = await getDoc(doc(db, "users", me, "following", targetUid));
   return snap.exists();
 }
 
-// --------------------------
-// LEAGUES
-// --------------------------
+// ----------------------------------------------------
+//  LEAGUES PRO — NEW MODEL
+// ----------------------------------------------------
+export async function createLeague({
+  name,
+  sport,
+  format,
+  venue,
+  visibility,
+  passwordHash = null,
+}) {
+  const ownerUid = auth.currentUser?.uid;
+  if (!ownerUid) throw new Error("Not authenticated");
 
-export async function addLeague(data) {
   const ref = await addDoc(collection(db, "leagues"), {
-    ...data,
-    createdAt: serverTimestamp(),
-    teams: [],
-    matches: [],
-    standings: [],
-    participants: []
-  });
-
-  return ref.id;
-}
-
-// -------------------------------
-// DELETE LEAGUE (FULL)
-// -------------------------------
-export async function deleteLeague(leagueId, ownerUid) {
-  const current = auth.currentUser?.uid;
-
-  if (!current) throw new Error("Not authenticated");
-  if (current !== ownerUid) throw new Error("Only the owner can delete this league");
-
-  // 1) DELETE TEAMS SUBCOLLECTION
-  const teamsRef = collection(db, "leagues", leagueId, "teams");
-  const teamsSnap = await getDocs(teamsRef);
-  const teamDeletes = teamsSnap.docs.map((d) => deleteDoc(d.ref));
-
-  await Promise.all(teamDeletes);
-
-  // 2) DELETE MATCHES SUBCOLLECTION
-  const matchesRef = collection(db, "leagues", leagueId, "matches");
-  const matchesSnap = await getDocs(matchesRef);
-  const matchDeletes = matchesSnap.docs.map((d) => deleteDoc(d.ref));
-
-  await Promise.all(matchDeletes);
-
-  // 3) DELETE THE LEAGUE DOCUMENT ITSELF
-  await deleteDoc(doc(db, "leagues", leagueId));
-}
-
-
-// -------------------------------
-// TEAMS
-// -------------------------------
-export async function createTeam(leagueId, { name }) {
-  const ref = await addDoc(collection(db, "leagues", leagueId, "teams"), {
     name,
-    members: [],
-    createdAt: serverTimestamp()
-  });
-
-  // Update counter
-  await updateDoc(doc(db, "leagues", leagueId), {
-    teamCount: increment(1)
+    sport,
+    format,
+    venue,
+    visibility,
+    passwordHash,
+    ownerUid,
+    createdAt: serverTimestamp(),
+    participants: [ownerUid],
   });
 
   return ref.id;
 }
 
-export async function deleteTeam(leagueId, teamId) {
-  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId));
-  await updateDoc(doc(db, "leagues", leagueId), { teamCount: increment(-1) });
-}
-
-
-// -------------------------------
-// MATCHES
-// -------------------------------
-export async function createMatch(leagueId, data) {
-  await addDoc(collection(db, "leagues", leagueId, "matches"), {
-    ...data,
-    createdAt: serverTimestamp()
-  });
-}
-
-export async function updateMatch(leagueId, matchId, data) {
-  await updateDoc(doc(db, "leagues", leagueId, "matches", matchId), data);
-}
-
-
-// -------------------------------
-// JOIN / LEAVE LEAGUE
-// -------------------------------
 export async function joinLeague(leagueId) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Not authenticated");
 
   await updateDoc(doc(db, "leagues", leagueId), {
-    participants: arrayUnion(uid)
+    participants: arrayUnion(uid),
   });
 }
 
@@ -468,10 +366,207 @@ export async function leaveLeague(leagueId) {
   if (!uid) throw new Error("Not authenticated");
 
   await updateDoc(doc(db, "leagues", leagueId), {
-    participants: arrayRemove(uid)
+    participants: arrayRemove(uid),
   });
 }
 
+// ----------------------------------------------------
+//  DELETE LEAGUE (FULL)
+// ----------------------------------------------------
+export async function deleteLeague(leagueId) {
+  const me = auth.currentUser?.uid;
+  if (!me) throw new Error("Not authenticated");
+
+  const leagueRef = doc(db, "leagues", leagueId);
+  const snap = await getDoc(leagueRef);
+
+  if (!snap.exists()) throw new Error("League not found");
+  if (snap.data().ownerUid !== me)
+    throw new Error("Only the owner can delete this league");
+
+  // delete teams
+  const teamsSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
+  await Promise.all(teamsSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  // delete matches
+  const matchesSnap = await getDocs(
+    collection(db, "leagues", leagueId, "matches")
+  );
+  await Promise.all(matchesSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  // delete league
+  await deleteDoc(leagueRef);
+}
+
+// -----------------------------
+// TEAMS PRO
+// -----------------------------
+
+// Crear equipo con roles y limite
+export async function createTeam(leagueId, { name, color, maxPlayers = 5 }) {
+  const initials = name
+    .trim()
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
+  const ref = await addDoc(collection(db, "leagues", leagueId, "teams"), {
+    name,
+    initials,
+    color,
+    maxPlayers: Number(maxPlayers),
+    captainUid: null,         // se asigna luego
+    members: [],
+    createdAt: serverTimestamp(),
+  });
+
+  return ref.id;
+}
+
+// Actualizar equipo (nombre, color, maxPlayers)
+export async function updateTeam(leagueId, teamId, data) {
+  return updateDoc(doc(db, "leagues", leagueId, "teams", teamId), data);
+}
+
+// Establecer capitán del equipo
+export async function setCaptain(leagueId, teamId, uid) {
+  return updateDoc(doc(db, "leagues", leagueId, "teams", teamId), {
+    captainUid: uid,
+  });
+}
+
+// Añadir jugador al equipo
+export async function joinTeam(leagueId, teamId, uid) {
+  const teamRef = doc(db, "leagues", leagueId, "teams", teamId);
+  const allTeamsRef = collection(db, "leagues", leagueId, "teams");
+
+  await runTransaction(db, async (tx) => {
+    const teamSnap = await tx.get(teamRef);
+    if (!teamSnap.exists()) throw new Error("Team not found");
+
+    const team = teamSnap.data();
+    const members = team.members || [];
+
+    // Comprobar si está lleno
+    if (members.length >= team.maxPlayers) {
+      throw new Error("Team is full");
+    }
+
+    // Comprobar si pertenece a otro equipo
+    const allTeamsSnap = await getDocs(allTeamsRef);
+    for (const t of allTeamsSnap.docs) {
+      const data = t.data();
+      if (data.members?.includes(uid) && t.id !== teamId) {
+        throw new Error("User is already in another team");
+      }
+    }
+
+    tx.update(teamRef, {
+      members: arrayUnion(uid),
+    });
+
+    // Si no hay capitán → el primero que entra lo es
+    if (!team.captainUid) {
+      tx.update(teamRef, { captainUid: uid });
+    }
+  });
+}
+
+// Salir del equipo
+export async function leaveTeam(leagueId, teamId, uid) {
+  const ref = doc(db, "leagues", leagueId, "teams", teamId);
+  await updateDoc(ref, {
+    members: arrayRemove(uid),
+  });
+}
+
+// El owner puede expulsar jugadores
+export async function kickPlayer(leagueId, teamId, uid) {
+  const ref = doc(db, "leagues", leagueId, "teams", teamId);
+  await updateDoc(ref, {
+    members: arrayRemove(uid),
+  });
+}
+
+// Borrar equipo
+export async function deleteTeam(leagueId, teamId) {
+  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId));
+}
+
+
+// ----------------------------------------------------
+//  MATCHES — With Captain Double Confirmation
+// ----------------------------------------------------
+export async function createMatch(leagueId, { teamA, teamB, date }) {
+  const ref = await addDoc(collection(db, "leagues", leagueId, "matches"), {
+    teamA,
+    teamB,
+    proposedScores: {},
+    finalScoreA: null,
+    finalScoreB: null,
+    date,
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+
+  return ref.id;
+}
+
+export async function proposeScore(leagueId, matchId, uid, scoreA, scoreB) {
+  const ref = doc(db, "leagues", leagueId, "matches", matchId);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Match not found");
+
+    const data = snap.data();
+    const proposed = {
+      ...(data.proposedScores || {}),
+      [uid]: { scoreA, scoreB },
+    };
+
+    let finalScoreA = data.finalScoreA;
+    let finalScoreB = data.finalScoreB;
+    let status = "waiting_confirmation";
+
+    const values = Object.values(proposed);
+    if (values.length >= 2) {
+      const [a, b] = values;
+      if (a.scoreA === b.scoreA && a.scoreB === b.scoreB) {
+        finalScoreA = a.scoreA;
+        finalScoreB = a.scoreB;
+        status = "confirmed";
+      }
+    }
+
+    tx.update(ref, {
+      proposedScores: proposed,
+      finalScoreA,
+      finalScoreB,
+      status,
+    });
+  });
+}
+
+export async function forceScore(leagueId, matchId, scoreA, scoreB) {
+  const owner = auth.currentUser?.uid;
+  const leagueSnap = await getDoc(doc(db, "leagues", leagueId));
+
+  if (!leagueSnap.exists()) throw new Error("League not found");
+  if (leagueSnap.data().ownerUid !== owner)
+    throw new Error("Only the owner can force results");
+
+  await updateDoc(doc(db, "leagues", leagueId, "matches", matchId), {
+    finalScoreA: scoreA,
+    finalScoreB: scoreB,
+    status: "confirmed",
+  });
+}
+
+// ----------------------------------------------------
+//  EXPORT FIREBASE UTILITIES (optional)
+// ----------------------------------------------------
 export {
   collection,
   doc,
@@ -486,5 +581,5 @@ export {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
-  increment
+  increment,
 };
