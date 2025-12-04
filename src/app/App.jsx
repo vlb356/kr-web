@@ -31,7 +31,7 @@ import LeagueDetail from "@/features/leagues/LeagueDetail";
 import TeamDetail from "@/features/leagues/TeamDetail";
 import PasswordGate from "@/features/leagues/PasswordGate";
 
-// CHILD ROUTES (pages inside league)
+// LEAGUE SUBPAGES (nested)
 import OverviewSection from "@/features/leagues/components/OverviewSection";
 import TeamsSection from "@/features/leagues/components/TeamsSection";
 import MatchesSection from "@/features/leagues/components/MatchesSection";
@@ -41,18 +41,25 @@ export default function App() {
   return (
     <Router>
       <div className="min-h-screen flex flex-col">
+        {/* NAV */}
         <Nav />
 
         <main className="flex-1">
           <Routes>
 
-            {/* PUBLIC ROUTES */}
+            {/* ---------------------- */}
+            {/* PUBLIC ROUTES          */}
+            {/* ---------------------- */}
+
             <Route path="/" element={<Marketing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/explore" element={<Explore />} />
 
-            {/* PROFILE */}
+            {/* ---------------------- */}
+            {/* PROFILE                */}
+            {/* ---------------------- */}
+
             <Route
               path="/profile/:id"
               element={
@@ -80,7 +87,10 @@ export default function App() {
               }
             />
 
-            {/* EVENTS */}
+            {/* ---------------------- */}
+            {/* EVENTS                 */}
+            {/* ---------------------- */}
+
             <Route
               path="/events"
               element={
@@ -99,7 +109,10 @@ export default function App() {
               }
             />
 
-            {/* LEAGUES */}
+            {/* ---------------------- */}
+            {/* LEAGUES MODULE         */}
+            {/* ---------------------- */}
+
             <Route
               path="/leagues"
               element={
@@ -118,6 +131,7 @@ export default function App() {
               }
             />
 
+            {/* PASSWORD */}
             <Route
               path="/league/:leagueId/password"
               element={
@@ -127,7 +141,7 @@ export default function App() {
               }
             />
 
-            {/* LEAGUE DETAIL WITH NESTED ROUTES */}
+            {/* --- MAIN LEAGUE LAYOUT --- */}
             <Route
               path="/league/:leagueId"
               element={
@@ -136,15 +150,14 @@ export default function App() {
                 </ProtectedRoute>
               }
             >
-              {/* Default tab → overview */}
-              <Route path="" element={<OverviewSection />} />
+              {/* Nested routes */}
               <Route path="overview" element={<OverviewSection />} />
               <Route path="teams" element={<TeamsSection />} />
               <Route path="matches" element={<MatchesSection />} />
               <Route path="standings" element={<StandingsSection />} />
             </Route>
 
-            {/* TEAM DETAIL */}
+            {/* TEAM DETAIL (NO CAMBIA NADA) */}
             <Route
               path="/league/:leagueId/team/:teamId"
               element={
@@ -154,7 +167,10 @@ export default function App() {
               }
             />
 
-            {/* SOCIAL */}
+            {/* ---------------------- */}
+            {/* SOCIAL                 */}
+            {/* ---------------------- */}
+
             <Route
               path="/social"
               element={
@@ -173,7 +189,10 @@ export default function App() {
               }
             />
 
-            {/* 404 */}
+            {/* ---------------------- */}
+            {/* 404                    */}
+            {/* ---------------------- */}
+
             <Route
               path="*"
               element={
@@ -182,7 +201,6 @@ export default function App() {
                 </div>
               }
             />
-
           </Routes>
         </main>
 

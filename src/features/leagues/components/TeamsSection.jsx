@@ -1,80 +1,54 @@
-import { useOutletContext, useNavigate } from "react-router-dom";
+// src/features/leagues/components/TeamsSection.jsx
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db, joinTeam, leaveTeam } from "@/lib/firebase";
-import TeamLogo from "./TeamLogo";
+import { db } from "@/lib/firebase";
+import { Link, useParams } from "react-router-dom";
 
-export default function TeamsSection() {
-    const { leagueId, user } = useOutletContext();
-    const navigate = useNavigate();
-
+export default function TeamsSection({ league }) {
+    const { leagueId } = useParams();
     const [teams, setTeams] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!leagueId) return;
         loadTeams();
     }, [leagueId]);
 
     async function loadTeams() {
-        const ref = collection(db, "leagues", leagueId, "teams");
-        const snap = await getDocs(ref);
+        try {
+            const ref = collection(db, "leagues", leagueId, "teams");
+            const snap = await getDocs(ref);
 
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setTeams(arr);
+            const list = snap.docs.map(doc => ({
+                id: doc.id,      // ← IMPORTANTE: usar id
+                ...doc.data(),
+            }));
+
+            setTeams(list);
+        } catch (err) {
+            console.error("Error loading teams:", err);
+        } finally {
+            setLoading(false);
+        }
     }
 
-    async function handleJoin(teamId) {
-        await joinTeam(leagueId, teamId, user.uid);
-        await loadTeams();
-    }
-
-    async function handleLeave(teamId) {
-        await leaveTeam(leagueId, teamId, user.uid);
-        await loadTeams();
-    }
+    if (loading) return <div className="p-4">Loading teams...</div>;
+    if (!teams.length) return <div className="p-4">No teams available.</div>;
 
     return (
-        <div className="mt-6 space-y-3">
-            {teams.map(team => {
-                const isMember = team.members?.includes(user.uid);
-
-                return (
-                    <div
-                        key={team.id}
-                        className="p-4 border rounded-lg flex items-center justify-between"
-                    >
-                        <div
-                            className="flex items-center gap-3 cursor-pointer"
-                            onClick={() => navigate(`/league/${leagueId}/team/${team.id}`)}
-                        >
-                            <TeamLogo initials={team.initials} color={team.color} />
-                            <div>
-                                <div className="font-semibold">{team.name}</div>
-                                <div className="text-sm text-gray-600">
-                                    {team.members?.length || 0}/{team.maxPlayers || 10} players
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            {isMember ? (
-                                <button
-                                    className="px-3 py-1 bg-red-500 text-white rounded"
-                                    onClick={() => handleLeave(team.id)}
-                                >
-                                    Leave
-                                </button>
-                            ) : (
-                                <button
-                                    className="px-3 py-1 bg-blue-600 text-white rounded"
-                                    onClick={() => handleJoin(team.id)}
-                                >
-                                    Join
-                                </button>
-                            )}
-                        </div>
+        <div className="p-4 space-y-3">
+            {teams.map(team => (
+                <Link
+                    key={team.id}    // ← IMPORTANTE
+                    to={`/league/${leagueId}/team/${team.id}`}
+                    className="block p-4 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                >
+                    <div className="font-semibold text-lg">{team.name}</div>
+                    <div className="text-gray-500 text-sm">
+                        Members: {team.members?.length || 0}
                     </div>
-                );
-            })}
+                </Link>
+            ))}
         </div>
     );
 }

@@ -1,6 +1,15 @@
+// src/features/leagues/components/AdminSection.jsx
 import React, { useState } from "react";
-import { db, collection, getDocs, deleteDoc, doc } from "@/lib/firebase";
-import { deleteLeague } from "@/lib/firebase";
+
+// Firestore real
+import {
+    collection,
+    getDocs,
+    deleteDoc,
+    doc,
+} from "firebase/firestore";
+
+import { db, deleteLeague } from "@/lib/firebase";
 
 export default function AdminSection({ league }) {
     const leagueId = league.id;
@@ -9,9 +18,9 @@ export default function AdminSection({ league }) {
     const [loadingResetTeams, setLoadingResetTeams] = useState(false);
     const [loadingResetMatches, setLoadingResetMatches] = useState(false);
 
-    // ----------------------------------------------------------------------
+    // =======================
     // DELETE ALL TEAMS
-    // ----------------------------------------------------------------------
+    // =======================
     async function resetTeams() {
         if (!confirm("This will remove ALL teams. Continue?")) return;
 
@@ -27,9 +36,9 @@ export default function AdminSection({ league }) {
         alert("Teams removed successfully.");
     }
 
-    // ----------------------------------------------------------------------
+    // =======================
     // DELETE ALL MATCHES
-    // ----------------------------------------------------------------------
+    // =======================
     async function resetMatches() {
         if (!confirm("This will remove ALL matches. Continue?")) return;
 
@@ -45,11 +54,12 @@ export default function AdminSection({ league }) {
         alert("Matches removed successfully.");
     }
 
-    // ----------------------------------------------------------------------
-    // DELETE ENTIRE LEAGUE
-    // ----------------------------------------------------------------------
+    // =======================
+    // DELETE LEAGUE
+    // =======================
     async function handleDeleteLeague() {
-        if (!confirm("⚠ Are you sure you want to permanently delete this league?")) return;
+        if (!confirm("⚠ Are you sure you want to permanently delete this league?"))
+            return;
 
         setLoadingDeleteLeague(true);
 
@@ -66,7 +76,7 @@ export default function AdminSection({ league }) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 mt-10">
 
             <h2 className="text-2xl font-bold text-red-600">Admin Panel</h2>
 

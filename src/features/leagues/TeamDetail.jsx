@@ -39,9 +39,13 @@ export default function TeamDetail() {
                 const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists()) {
-                    users.push({ uid, ...userSnap.data() });
+                    const info = userSnap.data();
+                    users.push({
+                        uid,
+                        name: info.name || "(No name)",
+                    });
                 } else {
-                    users.push({ uid, displayName: "(Unknown user)" });
+                    users.push({ uid, name: "(Unknown user)" });
                 }
             }
 
@@ -70,17 +74,17 @@ export default function TeamDetail() {
                         key={p.uid}
                         className="p-3 rounded bg-gray-100 flex items-center gap-3"
                     >
+                        {/* INICIALES */}
                         <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 text-white font-bold">
-                            {p.displayName
-                                ? p.displayName
-                                    .split(" ")
-                                    .map((x) => x[0]?.toUpperCase())
-                                    .join("")
-                                : "?"}
+                            {p.name
+                                .split(" ")
+                                .map((x) => x[0]?.toUpperCase())
+                                .join("")}
                         </div>
 
+                        {/* INFORMACIÓN */}
                         <div>
-                            <div className="font-semibold">{p.displayName || "Unknown"}</div>
+                            <div className="font-semibold">{p.name}</div>
                             <div className="text-sm text-gray-500">{p.uid}</div>
                         </div>
                     </div>

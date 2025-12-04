@@ -97,12 +97,6 @@ export async function ensureUserDoc(uid) {
   }
 }
 
-export async function getUserProfile(uid) {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  return snap.exists() ? snap.data() : null;
-}
-
 // ----------------------------------------------------
 //  SUBSCRIPTIONS
 // ----------------------------------------------------
@@ -562,6 +556,21 @@ export async function forceScore(leagueId, matchId, scoreA, scoreB) {
     finalScoreB: scoreB,
     status: "confirmed",
   });
+}
+
+// Obtener perfil simple de usuario
+export async function getUserProfile(uid) {
+  try {
+    const ref = doc(db, "users", uid);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) return null;
+
+    return { uid, ...snap.data() };
+  } catch (e) {
+    console.error("Error loading user profile:", e);
+    return null;
+  }
 }
 
 // ----------------------------------------------------
