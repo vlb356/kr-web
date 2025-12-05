@@ -1,8 +1,7 @@
-// src/features/leagues/TeamDetail.jsx
-import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { useParams, Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function TeamDetail() {
     const { leagueId, teamId } = useParams();
@@ -12,98 +11,119 @@ export default function TeamDetail() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        load();
-    }, []);
-
-    async function load() {
-        try {
+        async function loadTeam() {
             const ref = doc(db, "leagues", leagueId, "teams", teamId);
             const snap = await getDoc(ref);
 
             if (!snap.exists()) {
-                setTeam(null);
+                setLoading(false);
                 return;
             }
 
-            const data = snap.data();
-            setTeam(data);
+            const teamData = snap.data();
+            setTeam(teamData);
 
-            const list = [];
-            for (const uid of data.members || []) {
-                const uref = doc(db, "users", uid);
-                const usnap = await getDoc(uref);
-                list.push({
-                    uid,
-                    displayName: usnap.exists() ? usnap.data().displayName : "Unknown",
-                });
+            // ---- Load players from users/{uid} ----
+            const finalPlayers = [];
+
+            for (const uid of teamData.members || []) {
+                const userRef = doc(db, "users", uid);
+                const userSnap = await getDoc(userRef);
+
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+
+                    finalPlayers.push({
+                        uid,
+                        name: data.name || "Unknown user",
+                        avatarUrl: data.avatarUrl || null,
+                        email: data.email,
+                    });
+                } else {
+                    finalPlayers.push({
+                        uid,
+                        name: "Unknown user",
+                        avatarUrl: null,
+                    });
+                }
             }
-            setPlayers(list);
-        } catch (err) {
-            console.error("Error loading team:", err);
-        } finally {
+
+            setPlayers(finalPlayers);
             setLoading(false);
         }
-    }
 
-    if (loading) return <div className="p-6">Loading...</div>;
-    if (!team) return <div className="p-6 text-red-500">Team not found</div>;
+        loadTeam();
+    }, [leagueId, teamId]);
+
+    if (loading) return <p className="p-6">Loading...</p>;
+    if (!team) return <p className="p-6 text-red-500">Team not found.</p>;
 
     return (
-        <div className="p-8 max-w-3xl mx-auto">
-            {/* HEADER */}
+        <div className="max-w-4xl mx-auto p-6">
+
+            {/* BACK BUTTON */}
+            <Link
+                to={`/league/${leagueId}/teams`}
+                className="text-blue-600 hover:underline block mb-6"
+            >
+                ← Back to teams
+            </Link>
+
+            {/* TEAM HEADER */}
             <div className="flex items-center gap-4 mb-6">
                 <div
-                    className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold shadow"
-                    style={{ backgroundColor: team.color || "#1662A6" }}
+                    className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                    style={{ backgroundColor: team.color }}
                 >
-                    {(team.initials || team.name || "?")
-                        .toString()
-                        .slice(0, 2)
-                        .toUpperCase()}
+                    {team.initials}
                 </div>
 
                 <div>
-                    <h1 className="text-3xl font-bold">{team.name}</h1>
-                    <p className="text-gray-600 mt-1">
-                        {team.description || "No description yet."}
-                    </p>
+                    <h1 className="text-3xl font-semibold">{team.name}</h1>
+                    <p className="text-gray-600">{team.description || "No description"}</p>
                 </div>
             </div>
 
-            {/* INFO BOX */}
-            <div className="bg-white rounded-lg p-4 shadow mb-8">
-                <p>
-                    <strong>Players:</strong> {players.length} / {team.maxPlayers}
+            {/* INFO CARD */}
+            <div className="bg-white rounded-lg shadow p-4 mb-8">
+                <p className="text-lg font-semibold">
+                    Players: {players.length} / {team.maxPlayers}
                 </p>
-                {team.createdAt?.toDate && (
-                    <p className="mt-2 text-sm text-gray-500">
-                        Created on: {team.createdAt.toDate().toLocaleString()}
-                    </p>
-                )}
+                <p className="text-sm text-gray-500 mt-2">
+                    Created on: {new Date(team.createdAt?.toDate?.() || Date.now()).toLocaleString()}
+                </p>
             </div>
 
             {/* PLAYERS LIST */}
-            <h2 className="text-xl font-semibold mb-3">Players</h2>
+            <h2 className="text-xl font-semibold mb-4">Players</h2>
 
-            <div className="flex flex-col gap-2">
-                {players.map((p) => (
+            {players.length === 0 && (
+                <p className="text-gray-500">No players yet.</p>
+            )}
+
+            <div className="space-y-3">
+                {players.map(user => (
                     <div
-                        key={p.uid}
-                        className="flex items-center gap-3 bg-gray-100 p-3 rounded-lg shadow-sm"
+                        key={user.uid}
+                        className="flex items-center gap-4 bg-gray-100 p-3 rounded-lg"
                     >
-                        <div className="w-10 h-10 bg-[#1662A6] rounded-full flex items-center justify-center text-white font-semibold">
-                            {p.displayName?.[0]?.toUpperCase() || "?"}
-                        </div>
-                        <div>
-                            <div className="font-semibold">{p.displayName}</div>
-                            <div className="text-xs text-gray-500">{p.uid}</div>
-                        </div>
+                        {/* Avatar */}
+                        {user.avatarUrl ? (
+                            <img
+                                src={user.avatarUrl}
+                                className="w-10 h-10 rounded-full object-cover"
+                                alt="profile"
+                            />
+                        ) : (
+                            <div className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full font-semibold">
+                                {user.name?.charAt(0)?.toUpperCase() || "?"}
+                            </div>
+                        )}
+
+                        {/* Name */}
+                        <div className="font-medium">{user.name}</div>
                     </div>
                 ))}
-
-                {players.length === 0 && (
-                    <p className="text-gray-500">No players yet.</p>
-                )}
             </div>
         </div>
     );
