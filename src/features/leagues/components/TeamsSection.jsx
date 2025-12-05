@@ -1,4 +1,3 @@
-// src/features/leagues/components/TeamsSection.jsx
 import { useEffect, useState } from "react";
 import {
     collection,
@@ -47,8 +46,19 @@ export default function TeamsSection({ leagueId, league }) {
         }
     }
 
+    // 🔥 PREVENIR QUE UN USUARIO ENTRE EN 2 EQUIPOS A LA VEZ
+    function userAlreadyInSomeTeam() {
+        return teams.some((t) => t.members.includes(user?.uid));
+    }
+
     async function joinTeam(teamId) {
         if (!user?.uid) return;
+
+        // ❌ Si ya pertenece a un equipo → NO PERMITIR ENTRAR
+        if (userAlreadyInSomeTeam()) {
+            alert("You cannot join more than one team at the same time.");
+            return;
+        }
 
         try {
             const teamRef = doc(db, "leagues", leagueId, "teams", teamId);
@@ -82,7 +92,6 @@ export default function TeamsSection({ leagueId, league }) {
             const data = snap.data();
             let members = Array.isArray(data.members) ? data.members : [];
 
-            // Si no estaba dentro, no hacemos nada
             if (!members.includes(user.uid)) return;
 
             members = members.filter((m) => m !== user.uid);
