@@ -1,94 +1,201 @@
-import React, { useEffect, useState } from "react";
+// src/features/leagues/components/TeamsSection.jsx
+import { useEffect, useState } from "react";
+import {
+    collection,
+    getDocs,
+    doc,
+    getDoc,
+    updateDoc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, addDoc, Timestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import AddTeamModal from "./AddTeamModal";
+import useAuth from "@/hooks/useAuth";
 
-export default function TeamsSection({ leagueId, league, user }) {
+export default function TeamsSection({ leagueId, league }) {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
     const [teams, setTeams] = useState([]);
     const [loading, setLoading] = useState(true);
-    const navigate = useNavigate();
+    const [showAdd, setShowAdd] = useState(false);
 
     useEffect(() => {
         loadTeams();
-    }, [leagueId]);
+    }, []);
 
     async function loadTeams() {
         try {
             const ref = collection(db, "leagues", leagueId, "teams");
             const snap = await getDocs(ref);
 
-            const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            setTeams(arr);
+            const items = snap.docs.map((d) => {
+                const data = d.data();
+                return {
+                    id: d.id,
+                    ...data,
+                    members: Array.isArray(data.members) ? data.members : [],
+                    maxPlayers: data.maxPlayers || 10,
+                };
+            });
+
+            setTeams(items);
         } catch (err) {
             console.error("Error loading teams:", err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
 
-    async function createTeam() {
-        const name = prompt("Team name:");
+    async function joinTeam(teamId) {
+        if (!user?.uid) return;
 
-        if (!name) return;
+        try {
+            const teamRef = doc(db, "leagues", leagueId, "teams", teamId);
+            const snap = await getDoc(teamRef);
 
-        const initials = name
-            .split(" ")
-            .map((x) => x[0]?.toUpperCase())
-            .join("")
-            .slice(0, 3);
+            if (!snap.exists()) return;
 
-        await addDoc(collection(db, "leagues", leagueId, "teams"), {
-            name,
-            initials,
-            color: "#1662A6",
-            createdAt: Timestamp.now(),
-            members: [user.uid],
-        });
+            const data = snap.data();
+            let members = Array.isArray(data.members) ? data.members : [];
 
-        loadTeams();
+            if (members.includes(user.uid)) return;
+
+            members = [...members, user.uid];
+
+            await updateDoc(teamRef, { members });
+            await loadTeams();
+        } catch (err) {
+            console.error("Join error:", err);
+        }
     }
 
-    if (loading) return <div className="p-6 text-[#122944]">Loading...</div>;
+    async function leaveTeam(teamId) {
+        if (!user?.uid) return;
+
+        try {
+            const teamRef = doc(db, "leagues", leagueId, "teams", teamId);
+            const snap = await getDoc(teamRef);
+
+            if (!snap.exists()) return;
+
+            const data = snap.data();
+            let members = Array.isArray(data.members) ? data.members : [];
+
+            // Si no estaba dentro, no hacemos nada
+            if (!members.includes(user.uid)) return;
+
+            members = members.filter((m) => m !== user.uid);
+
+            await updateDoc(teamRef, { members });
+            await loadTeams();
+        } catch (err) {
+            console.error("Leave error:", err);
+        }
+    }
+
+    if (loading) return <div>Loading…</div>;
 
     return (
-        <div className="space-y-6">
+        <div className="mt-6">
+            {/* TOP BAR */}
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Teams</h2>
 
-            {/* CREATE TEAM BUTTON (Only owner) */}
-            {user.uid === league.ownerUid && (
-                <button
-                    onClick={createTeam}
-                    className="px-4 py-2 bg-[#1662A6] text-white rounded-lg shadow hover:bg-[#124f84]"
-                >
-                    + Create Team
-                </button>
-            )}
+                {user?.uid === league.ownerUid && (
+                    <button
+                        onClick={() => setShowAdd(true)}
+                        className="px-4 py-2 bg-[#1662A6] text-white rounded-lg shadow"
+                    >
+                        + Create team
+                    </button>
+                )}
+            </div>
 
-            {/* TEAMS LIST */}
-            {teams.length === 0 ? (
-                <div className="text-gray-500">No teams created yet.</div>
-            ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                    {teams.map((t) => (
+            {/* TEAM LIST */}
+            <div className="flex flex-col gap-4">
+                {teams.map((team) => {
+                    const isJoined = team.members.includes(user?.uid);
+                    const isFull = team.members.length >= team.maxPlayers;
+
+                    return (
                         <div
-                            key={t.id}
-                            onClick={() => navigate(`/league/${leagueId}/team/${t.id}`)}
-                            className="cursor-pointer bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition"
+                            key={team.id}
+                            className="flex justify-between items-center bg-white p-4 rounded-lg shadow cursor-pointer hover:bg-gray-50 transition"
+                            onClick={() => navigate(`/league/${leagueId}/team/${team.id}`)}
                         >
-                            <div className="flex items-center gap-3">
+                            {/* LEFT */}
+                            <div className="flex items-center gap-4">
                                 <div
-                                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg"
-                                    style={{ backgroundColor: t.color || "#1662A6" }}
+                                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow"
+                                    style={{ backgroundColor: team.color || "#1662A6" }}
                                 >
-                                    {t.initials}
+                                    {(team.initials || team.name || "?")
+                                        .toString()
+                                        .slice(0, 2)
+                                        .toUpperCase()}
                                 </div>
 
                                 <div>
-                                    <div className="font-bold text-[#122944]">{t.name}</div>
-                                    <div className="text-sm text-gray-500">{t.members?.length || 0} players</div>
+                                    <div className="font-semibold">{team.name}</div>
+                                    <div className="text-xs text-gray-500">
+                                        {team.members.length} players · Max {team.maxPlayers}
+                                    </div>
+                                    {team.description && (
+                                        <div className="text-xs text-gray-400 mt-1 line-clamp-1">
+                                            {team.description}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* RIGHT: JOIN / LEAVE */}
+                            <div className="flex items-center">
+                                {!isJoined && !isFull && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            joinTeam(team.id);
+                                        }}
+                                        className="px-4 py-2 bg-[#1662A6] text-white rounded-lg text-sm"
+                                    >
+                                        Join
+                                    </button>
+                                )}
+
+                                {isJoined && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            leaveTeam(team.id);
+                                        }}
+                                        className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm"
+                                    >
+                                        Leave
+                                    </button>
+                                )}
+
+                                {isFull && !isJoined && (
+                                    <span className="text-red-500 text-sm px-3">Full</span>
+                                )}
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    );
+                })}
+
+                {teams.length === 0 && (
+                    <p className="text-gray-500 text-center mt-6">
+                        No teams created yet.
+                    </p>
+                )}
+            </div>
+
+            {showAdd && (
+                <AddTeamModal
+                    leagueId={leagueId}
+                    onClose={() => setShowAdd(false)}
+                    onCreated={loadTeams}
+                />
             )}
         </div>
     );

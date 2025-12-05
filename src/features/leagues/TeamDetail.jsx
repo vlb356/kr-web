@@ -1,94 +1,109 @@
 // src/features/leagues/TeamDetail.jsx
-import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-
+import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-import TeamLogo from "./components/TeamLogo";
-
 export default function TeamDetail() {
     const { leagueId, teamId } = useParams();
+
     const [team, setTeam] = useState(null);
     const [players, setPlayers] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!leagueId || !teamId) return;
-        loadTeam();
-    }, [leagueId, teamId]);
+        load();
+    }, []);
 
-    async function loadTeam() {
+    async function load() {
         try {
-            const teamRef = doc(db, "leagues", leagueId, "teams", teamId);
-            const teamSnap = await getDoc(teamRef);
+            const ref = doc(db, "leagues", leagueId, "teams", teamId);
+            const snap = await getDoc(ref);
 
-            if (!teamSnap.exists()) {
+            if (!snap.exists()) {
                 setTeam(null);
                 return;
             }
 
-            const data = teamSnap.data();
+            const data = snap.data();
             setTeam(data);
 
-            // ------- LOAD USERS -------
-            const members = data.members || [];
-            const users = [];
-
-            for (const uid of members) {
-                const userRef = doc(db, "users", uid);
-                const userSnap = await getDoc(userRef);
-
-                if (userSnap.exists()) {
-                    const info = userSnap.data();
-                    users.push({
-                        uid,
-                        name: info.name || "(No name)",
-                    });
-                } else {
-                    users.push({ uid, name: "(Unknown user)" });
-                }
+            const list = [];
+            for (const uid of data.members || []) {
+                const uref = doc(db, "users", uid);
+                const usnap = await getDoc(uref);
+                list.push({
+                    uid,
+                    displayName: usnap.exists() ? usnap.data().displayName : "Unknown",
+                });
             }
-
-            setPlayers(users);
+            setPlayers(list);
         } catch (err) {
             console.error("Error loading team:", err);
+        } finally {
+            setLoading(false);
         }
     }
 
-    if (!team) return <div className="p-6">Team not found</div>;
+    if (loading) return <div className="p-6">Loading...</div>;
+    if (!team) return <div className="p-6 text-red-500">Team not found</div>;
 
     return (
-        <div className="p-6">
+        <div className="p-8 max-w-3xl mx-auto">
             {/* HEADER */}
-            <div className="flex items-center gap-3 mb-6">
-                <TeamLogo initials={team.initials} color={team.color} />
-                <h1 className="text-2xl font-bold">{team.name}</h1>
+            <div className="flex items-center gap-4 mb-6">
+                <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold shadow"
+                    style={{ backgroundColor: team.color || "#1662A6" }}
+                >
+                    {(team.initials || team.name || "?")
+                        .toString()
+                        .slice(0, 2)
+                        .toUpperCase()}
+                </div>
+
+                <div>
+                    <h1 className="text-3xl font-bold">{team.name}</h1>
+                    <p className="text-gray-600 mt-1">
+                        {team.description || "No description yet."}
+                    </p>
+                </div>
             </div>
 
-            {/* PLAYERS */}
-            <h2 className="font-semibold mb-3 text-lg">Players</h2>
+            {/* INFO BOX */}
+            <div className="bg-white rounded-lg p-4 shadow mb-8">
+                <p>
+                    <strong>Players:</strong> {players.length} / {team.maxPlayers}
+                </p>
+                {team.createdAt?.toDate && (
+                    <p className="mt-2 text-sm text-gray-500">
+                        Created on: {team.createdAt.toDate().toLocaleString()}
+                    </p>
+                )}
+            </div>
 
-            <div className="space-y-2">
+            {/* PLAYERS LIST */}
+            <h2 className="text-xl font-semibold mb-3">Players</h2>
+
+            <div className="flex flex-col gap-2">
                 {players.map((p) => (
                     <div
                         key={p.uid}
-                        className="p-3 rounded bg-gray-100 flex items-center gap-3"
+                        className="flex items-center gap-3 bg-gray-100 p-3 rounded-lg shadow-sm"
                     >
-                        {/* INICIALES */}
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 text-white font-bold">
-                            {p.name
-                                .split(" ")
-                                .map((x) => x[0]?.toUpperCase())
-                                .join("")}
+                        <div className="w-10 h-10 bg-[#1662A6] rounded-full flex items-center justify-center text-white font-semibold">
+                            {p.displayName?.[0]?.toUpperCase() || "?"}
                         </div>
-
-                        {/* INFORMACIÓN */}
                         <div>
-                            <div className="font-semibold">{p.name}</div>
-                            <div className="text-sm text-gray-500">{p.uid}</div>
+                            <div className="font-semibold">{p.displayName}</div>
+                            <div className="text-xs text-gray-500">{p.uid}</div>
                         </div>
                     </div>
                 ))}
+
+                {players.length === 0 && (
+                    <p className="text-gray-500">No players yet.</p>
+                )}
             </div>
         </div>
     );

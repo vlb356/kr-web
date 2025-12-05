@@ -1,53 +1,124 @@
 // src/features/leagues/components/OverviewSection.jsx
-import React from "react";
-import { format } from "date-fns";
+import React, { useEffect, useState } from "react";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function OverviewSection({ league }) {
-    if (!league) return <div className="p-4 text-red-500">No data</div>;
+    const leagueId = league?.id;
 
-    // Convert Firestore timestamp → JS Date
-    let createdAt;
+    const [ownerName, setOwnerName] = useState("");
+    const [teamsCount, setTeamsCount] = useState(null);
+    const [loadingTeams, setLoadingTeams] = useState(true);
 
-    try {
-        createdAt = league.createdAt?.toDate
+    // ------------------------------
+    // LOAD OWNER NAME
+    // ------------------------------
+    useEffect(() => {
+        if (!league?.ownerUid) return;
+
+        async function loadOwner() {
+            try {
+                const ref = doc(db, "users", league.ownerUid);
+                const snap = await getDoc(ref);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    setOwnerName(data.displayName || data.name || league.ownerUid);
+                } else {
+                    setOwnerName(league.ownerUid);
+                }
+            } catch (err) {
+                console.error("Error loading owner profile:", err);
+                setOwnerName(league.ownerUid);
+            }
+        }
+
+        loadOwner();
+    }, [league?.ownerUid]);
+
+    // ------------------------------
+    // LOAD TEAMS COUNT
+    // ------------------------------
+    useEffect(() => {
+        if (!leagueId) return;
+
+        async function loadTeamsCount() {
+            try {
+                setLoadingTeams(true);
+                const ref = collection(db, "leagues", leagueId, "teams");
+                const snap = await getDocs(ref);
+                setTeamsCount(snap.size);
+            } catch (err) {
+                console.error("Error loading teams count:", err);
+                setTeamsCount(0);
+            } finally {
+                setLoadingTeams(false);
+            }
+        }
+
+        loadTeamsCount();
+    }, [leagueId]);
+
+    if (!league) return <div className="text-sm text-gray-500">League not found</div>;
+
+    const createdAtDate =
+        league.createdAt?.toDate?.() instanceof Date
             ? league.createdAt.toDate()
-            : new Date();
-    } catch {
-        createdAt = new Date();
-    }
+            : null;
 
     return (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+        <div className="mt-6 space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h2 className="text-lg font-semibold text-[#122944] mb-3">Overview</h2>
 
-            <h2 className="text-xl font-bold text-[#122944] mb-5">
-                Overview
-            </h2>
+                <div className="space-y-2 text-sm">
+                    <div>
+                        <span className="font-medium text-gray-600">Owner: </span>
+                        <span className="text-[#1662A6]">{ownerName || league.ownerUid}</span>
+                    </div>
 
-            <div className="space-y-4 text-[#122944]">
+                    <div>
+                        <span className="font-medium text-gray-600">Visibility: </span>
+                        <span className="uppercase text-xs px-2 py-0.5 rounded-full bg-[#e6f0f8] text-[#1662A6] font-semibold">
+                            {league.visibility || "private"}
+                        </span>
+                    </div>
 
-                {/* OWNER */}
-                <div>
-                    <span className="font-semibold">Owner:</span>{" "}
-                    <span className="text-[#1662A6] font-medium">
-                        {league.ownerName || league.ownerUid}
-                    </span>
+                    <div>
+                        <span className="font-medium text-gray-600">Teams: </span>
+                        {loadingTeams ? (
+                            <span className="text-gray-400">Loading…</span>
+                        ) : (
+                            <span>{teamsCount ?? 0}</span>
+                        )}
+                    </div>
+
+                    <div>
+                        <span className="font-medium text-gray-600">Created: </span>
+                        {createdAtDate ? (
+                            <span>
+                                {createdAtDate.toLocaleDateString()}{" "}
+                                {createdAtDate.toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                })}
+                            </span>
+                        ) : (
+                            <span>-</span>
+                        )}
+                    </div>
                 </div>
-
-                {/* VISIBILITY */}
-                <div>
-                    <span className="font-semibold">Visibility:</span>{" "}
-                    <span className="capitalize text-[#E96F19] font-medium">
-                        {league.visibility}
-                    </span>
-                </div>
-
-                {/* CREATED DATE */}
-                <div>
-                    <span className="font-semibold">Created:</span>{" "}
-                    {format(createdAt, "dd/MM/yyyy, HH:mm")}
-                </div>
-
             </div>
+
+            {league.description && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                    <h3 className="text-sm font-semibold text-[#122944] mb-2">
+                        League Description
+                    </h3>
+                    <p className="text-sm text-gray-600 whitespace-pre-line">
+                        {league.description}
+                    </p>
+                </div>
+            )}
         </div>
     );
 }
