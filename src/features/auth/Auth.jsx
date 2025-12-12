@@ -62,8 +62,8 @@ export default function Auth() {
           <button
             onClick={() => setMode("login")}
             className={`text-lg font-semibold pb-1 transition ${mode === "login"
-                ? "text-[#1662A6] border-b-2 border-[#1662A6]"
-                : "text-gray-400 hover:text-[#122944]"
+              ? "text-[#1662A6] border-b-2 border-[#1662A6]"
+              : "text-gray-400 hover:text-[#122944]"
               }`}
           >
             Login
@@ -72,8 +72,8 @@ export default function Auth() {
           <button
             onClick={() => setMode("register")}
             className={`text-lg font-semibold pb-1 transition ${mode === "register"
-                ? "text-[#1662A6] border-b-2 border-[#1662A6]"
-                : "text-gray-400 hover:text-[#122944]"
+              ? "text-[#1662A6] border-b-2 border-[#1662A6]"
+              : "text-gray-400 hover:text-[#122944]"
               }`}
           >
             Register
@@ -141,7 +141,7 @@ export default function Auth() {
           <button
             type="submit"
             className="w-full py-3 bg-[#1662A6] text-white font-semibold rounded-xl 
-                       hover:bg-[#0e4d7d] transition shadow-sm"
+                     hover:bg-[#0e4d7d] transition shadow-sm"
           >
             {mode === "login" ? "Login" : "Create Account"}
           </button>

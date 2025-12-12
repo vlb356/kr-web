@@ -573,6 +573,115 @@ export async function getUserProfile(uid) {
   }
 }
 
+
+// Algoritmo round-robin doble
+function generateRoundRobinDouble(teams) {
+  const n = teams.length;
+  if (n < 2) return [];
+
+  // Si impar, añadimos "BYE" (descanso)
+  let list = [...teams];
+  let hasBye = false;
+
+  if (n % 2 !== 0) {
+    list.push({ id: "bye", name: "BYE" });
+    hasBye = true;
+  }
+
+  const total = list.length;
+  const rounds = total - 1;
+  const half = total / 2;
+
+  let schedule = [];
+
+  for (let round = 0; round < rounds; round++) {
+    let matches = [];
+
+    for (let i = 0; i < half; i++) {
+      const teamA = list[i];
+      const teamB = list[total - 1 - i];
+
+      if (teamA.id !== "bye" && teamB.id !== "bye") {
+        matches.push({
+          teamA,
+          teamB
+        });
+      }
+    }
+
+    // Rotación
+    const fixed = list[0];
+    const rotated = list.slice(1);
+    rotated.unshift(rotated.pop());
+    list = [fixed, ...rotated];
+
+    schedule.push(matches);
+  }
+
+  // Doble vuelta (invertimos local-visitante)
+  const secondRound = schedule.map(round =>
+    round.map(match => ({
+      teamA: match.teamB,
+      teamB: match.teamA
+    }))
+  );
+
+  return [...schedule, ...secondRound];
+}
+
+
+// =====================================
+// GENERATE SCHEDULE IN FIREBASE
+// =====================================
+export async function generateLeagueSchedule(leagueId) {
+
+  return runTransaction(db, async (tx) => {
+
+    // 1. Ver si ya hay partidos
+    const matchesRef = collection(db, "leagues", leagueId, "matches");
+    const matchesSnap = await getDocs(matchesRef);
+
+    if (!matchesSnap.empty) {
+      throw new Error("Schedule already generated");
+    }
+
+    // 2. Cargar equipos
+    const teamsRef = collection(db, "leagues", leagueId, "teams");
+    const teamSnap = await getDocs(teamsRef);
+
+    const teams = teamSnap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    if (teams.length < 2) {
+      throw new Error("At least 2 teams required");
+    }
+
+    // 3. Generar calendario
+    const schedule = generateRoundRobinDouble(teams);
+
+    // 4. Insertar los partidos
+    let matchday = 1;
+
+    for (const round of schedule) {
+      for (const m of round) {
+        await addDoc(matchesRef, {
+          teamA: m.teamA,
+          teamB: m.teamB,
+          scoreA: null,
+          scoreB: null,
+          status: "scheduled",
+          matchday,
+          createdAt: serverTimestamp()
+        });
+      }
+      matchday++;
+    }
+  });
+}
+  
+
 // ----------------------------------------------------
 //  EXPORT FIREBASE UTILITIES (optional)
 // ----------------------------------------------------

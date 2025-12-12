@@ -1,124 +1,101 @@
-// src/features/leagues/components/OverviewSection.jsx
 import React, { useEffect, useState } from "react";
 import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { Link } from "react-router-dom";
 
 export default function OverviewSection({ league }) {
+    const user = auth.currentUser;
     const leagueId = league?.id;
 
     const [ownerName, setOwnerName] = useState("");
-    const [teamsCount, setTeamsCount] = useState(null);
-    const [loadingTeams, setLoadingTeams] = useState(true);
+    const [teamsCount, setTeamsCount] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    // ------------------------------
-    // LOAD OWNER NAME
-    // ------------------------------
+    const isOwner = user && league?.ownerUid === user.uid;
+
+    /* -----------------------------
+       LOAD OWNER NAME
+    ----------------------------- */
     useEffect(() => {
         if (!league?.ownerUid) return;
 
         async function loadOwner() {
-            try {
-                const ref = doc(db, "users", league.ownerUid);
-                const snap = await getDoc(ref);
-                if (snap.exists()) {
-                    const data = snap.data();
-                    setOwnerName(data.displayName || data.name || league.ownerUid);
-                } else {
-                    setOwnerName(league.ownerUid);
-                }
-            } catch (err) {
-                console.error("Error loading owner profile:", err);
-                setOwnerName(league.ownerUid);
+            const ref = doc(db, "users", league.ownerUid);
+            const snap = await getDoc(ref);
+
+            if (snap.exists()) {
+                setOwnerName(snap.data().name || snap.data().email);
+            } else {
+                setOwnerName("Unknown");
             }
         }
 
         loadOwner();
-    }, [league?.ownerUid]);
+    }, [league]);
 
-    // ------------------------------
-    // LOAD TEAMS COUNT
-    // ------------------------------
+    /* -----------------------------
+       LOAD TEAMS COUNT
+    ----------------------------- */
     useEffect(() => {
         if (!leagueId) return;
 
-        async function loadTeamsCount() {
-            try {
-                setLoadingTeams(true);
-                const ref = collection(db, "leagues", leagueId, "teams");
-                const snap = await getDocs(ref);
-                setTeamsCount(snap.size);
-            } catch (err) {
-                console.error("Error loading teams count:", err);
-                setTeamsCount(0);
-            } finally {
-                setLoadingTeams(false);
-            }
+        async function loadTeams() {
+            setLoading(true);
+            const snap = await getDocs(
+                collection(db, "leagues", leagueId, "teams")
+            );
+            setTeamsCount(snap.size);
+            setLoading(false);
         }
 
-        loadTeamsCount();
+        loadTeams();
     }, [leagueId]);
 
-    if (!league) return <div className="text-sm text-gray-500">League not found</div>;
-
-    const createdAtDate =
-        league.createdAt?.toDate?.() instanceof Date
-            ? league.createdAt.toDate()
-            : null;
-
     return (
-        <div className="mt-6 space-y-4">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                <h2 className="text-lg font-semibold text-[#122944] mb-3">Overview</h2>
+        <div className="space-y-8">
 
-                <div className="space-y-2 text-sm">
-                    <div>
-                        <span className="font-medium text-gray-600">Owner: </span>
-                        <span className="text-[#1662A6]">{ownerName || league.ownerUid}</span>
-                    </div>
-
-                    <div>
-                        <span className="font-medium text-gray-600">Visibility: </span>
-                        <span className="uppercase text-xs px-2 py-0.5 rounded-full bg-[#e6f0f8] text-[#1662A6] font-semibold">
-                            {league.visibility || "private"}
-                        </span>
-                    </div>
-
-                    <div>
-                        <span className="font-medium text-gray-600">Teams: </span>
-                        {loadingTeams ? (
-                            <span className="text-gray-400">Loading…</span>
-                        ) : (
-                            <span>{teamsCount ?? 0}</span>
-                        )}
-                    </div>
-
-                    <div>
-                        <span className="font-medium text-gray-600">Created: </span>
-                        {createdAtDate ? (
-                            <span>
-                                {createdAtDate.toLocaleDateString()}{" "}
-                                {createdAtDate.toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                })}
-                            </span>
-                        ) : (
-                            <span>-</span>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {league.description && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                    <h3 className="text-sm font-semibold text-[#122944] mb-2">
-                        League Description
-                    </h3>
-                    <p className="text-sm text-gray-600 whitespace-pre-line">
-                        {league.description}
+            {/* ADMIN PANEL */}
+            {isOwner && (
+                <div className="bg-[#122944] text-white rounded-xl p-6">
+                    <h2 className="text-xl font-semibold mb-2">Admin Panel</h2>
+                    <p className="text-sm opacity-90 mb-4">
+                        Manage league configuration and matches
                     </p>
+
+                    <Link
+                        to="matches"
+                        className="inline-block bg-[#E96F19] px-5 py-2 rounded-lg font-semibold hover:bg-[#cf5f15]"
+                    >
+                        Generate Matches
+                    </Link>
                 </div>
             )}
+
+            {/* LEAGUE INFO */}
+            <div className="grid md:grid-cols-3 gap-6">
+
+                <div className="bg-white border rounded-xl p-6">
+                    <p className="text-gray-500 text-sm">League owner</p>
+                    <p className="font-semibold text-lg text-[#122944]">
+                        {ownerName || "—"}
+                    </p>
+                </div>
+
+                <div className="bg-white border rounded-xl p-6">
+                    <p className="text-gray-500 text-sm">Teams</p>
+                    <p className="font-semibold text-lg text-[#122944]">
+                        {loading ? "Loading…" : teamsCount}
+                    </p>
+                </div>
+
+                <div className="bg-white border rounded-xl p-6">
+                    <p className="text-gray-500 text-sm">Status</p>
+                    <p className="font-semibold text-lg text-green-600">
+                        Active
+                    </p>
+                </div>
+
+            </div>
         </div>
     );
 }

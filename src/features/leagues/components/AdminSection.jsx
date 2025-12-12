@@ -1,26 +1,26 @@
 // src/features/leagues/components/AdminSection.jsx
-import React, { useState } from "react";
-
-// Firestore real
+import { useState } from "react";
 import {
     collection,
     getDocs,
     deleteDoc,
+    addDoc,
     doc,
+    serverTimestamp,
 } from "firebase/firestore";
-
 import { db, deleteLeague } from "@/lib/firebase";
 
 export default function AdminSection({ league }) {
     const leagueId = league.id;
 
-    const [loadingDeleteLeague, setLoadingDeleteLeague] = useState(false);
     const [loadingResetTeams, setLoadingResetTeams] = useState(false);
     const [loadingResetMatches, setLoadingResetMatches] = useState(false);
+    const [loadingAutoMatches, setLoadingAutoMatches] = useState(false);
+    const [loadingDeleteLeague, setLoadingDeleteLeague] = useState(false);
 
-    // =======================
-    // DELETE ALL TEAMS
-    // =======================
+    // ---------------------------------------------------
+    // RESET TEAMS
+    // ---------------------------------------------------
     async function resetTeams() {
         if (!confirm("This will remove ALL teams. Continue?")) return;
 
@@ -29,16 +29,15 @@ export default function AdminSection({ league }) {
         const teamsRef = collection(db, "leagues", leagueId, "teams");
         const snap = await getDocs(teamsRef);
 
-        const deletions = snap.docs.map((d) => deleteDoc(d.ref));
-        await Promise.all(deletions);
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
 
         setLoadingResetTeams(false);
-        alert("Teams removed successfully.");
+        alert("All teams removed.");
     }
 
-    // =======================
-    // DELETE ALL MATCHES
-    // =======================
+    // ---------------------------------------------------
+    // RESET MATCHES
+    // ---------------------------------------------------
     async function resetMatches() {
         if (!confirm("This will remove ALL matches. Continue?")) return;
 
@@ -47,19 +46,68 @@ export default function AdminSection({ league }) {
         const matchesRef = collection(db, "leagues", leagueId, "matches");
         const snap = await getDocs(matchesRef);
 
-        const deletions = snap.docs.map((d) => deleteDoc(d.ref));
-        await Promise.all(deletions);
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
 
         setLoadingResetMatches(false);
-        alert("Matches removed successfully.");
+        alert("All matches removed.");
     }
 
-    // =======================
-    // DELETE LEAGUE
-    // =======================
-    async function handleDeleteLeague() {
-        if (!confirm("⚠ Are you sure you want to permanently delete this league?"))
+    // ---------------------------------------------------
+    // AUTO GENERATE MATCHES (ROUND ROBIN – ONE LEG)
+    // ---------------------------------------------------
+    async function generateAutoMatches() {
+        setLoadingAutoMatches(true);
+
+        const teamsSnap = await getDocs(
+            collection(db, "leagues", leagueId, "teams")
+        );
+
+        const teams = teamsSnap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+        }));
+
+        if (teams.length < 2) {
+            alert("At least 2 teams are required.");
+            setLoadingAutoMatches(false);
             return;
+        }
+
+        const matchesRef = collection(db, "leagues", leagueId, "matches");
+        const existingMatches = await getDocs(matchesRef);
+
+        if (!existingMatches.empty) {
+            if (!confirm("Matches already exist. Generate anyway?")) {
+                setLoadingAutoMatches(false);
+                return;
+            }
+        }
+
+        let round = 1;
+
+        for (let i = 0; i < teams.length; i++) {
+            for (let j = i + 1; j < teams.length; j++) {
+                await addDoc(matchesRef, {
+                    homeTeamId: teams[i].id,
+                    awayTeamId: teams[j].id,
+                    round,
+                    played: false,
+                    score: null,
+                    createdAt: serverTimestamp(),
+                });
+                round++;
+            }
+        }
+
+        setLoadingAutoMatches(false);
+        alert("Matches generated successfully.");
+    }
+
+    // ---------------------------------------------------
+    // DELETE LEAGUE
+    // ---------------------------------------------------
+    async function handleDeleteLeague() {
+        if (!confirm("⚠ This will permanently delete the league. Continue?")) return;
 
         setLoadingDeleteLeague(true);
 
@@ -69,64 +117,89 @@ export default function AdminSection({ league }) {
             window.location.hash = "#/leagues";
         } catch (err) {
             console.error(err);
-            alert("Error: " + err.message);
+            alert("Error deleting league");
         }
 
         setLoadingDeleteLeague(false);
     }
 
+    // ---------------------------------------------------
+    // RENDER
+    // ---------------------------------------------------
     return (
         <div className="space-y-6 mt-10">
-
             <h2 className="text-2xl font-bold text-red-600">Admin Panel</h2>
 
             <p className="text-gray-600">
-                These tools are only available to the league owner. Handle with care.
+                These actions are only available to the league owner.
             </p>
 
-            {/* RESET TEAMS */}
+            {/* TEAMS */}
             <div className="border p-4 rounded-lg">
-                <h3 className="font-bold text-lg mb-2">Teams</h3>
-                <p className="text-gray-500 mb-4">
-                    This will delete all teams created in this league.
+                <h3 className="font-semibold text-lg mb-2">Teams</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Remove all teams from the league.
                 </p>
 
                 <button
                     onClick={resetTeams}
                     disabled={loadingResetTeams}
-                    className="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                    className="bg-yellow-500 text-white px-4 py-2 rounded disabled:opacity-50"
                 >
                     {loadingResetTeams ? "Removing..." : "Remove All Teams"}
                 </button>
             </div>
 
-            {/* RESET MATCHES */}
+            {/* MATCHES */}
             <div className="border p-4 rounded-lg">
-                <h3 className="font-bold text-lg mb-2">Matches</h3>
-                <p className="text-gray-500 mb-4">
-                    This will delete every match (confirmed or not).
+                <h3 className="font-semibold text-lg mb-2">Matches</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Remove all matches from the league.
                 </p>
 
                 <button
                     onClick={resetMatches}
                     disabled={loadingResetMatches}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                    className="bg-orange-500 text-white px-4 py-2 rounded disabled:opacity-50"
                 >
                     {loadingResetMatches ? "Removing..." : "Remove All Matches"}
                 </button>
             </div>
 
+            {/* AUTO MATCHES */}
+            <div className="border p-4 rounded-lg">
+                <h3 className="font-semibold text-lg mb-2">
+                    Generate Matches Automatically
+                </h3>
+
+                <p className="text-sm text-gray-500 mb-4">
+                    Creates a round-robin schedule where every team plays once against all
+                    others.
+                </p>
+
+                <button
+                    onClick={generateAutoMatches}
+                    disabled={loadingAutoMatches}
+                    className="bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                >
+                    {loadingAutoMatches ? "Generating..." : "Generate Matches"}
+                </button>
+            </div>
+
             {/* DELETE LEAGUE */}
             <div className="border p-4 rounded-lg">
-                <h3 className="font-bold text-lg mb-2 text-red-600">Delete League</h3>
-                <p className="text-gray-500 mb-4">
-                    This action is irreversible. All data will be lost.
+                <h3 className="font-semibold text-lg text-red-600 mb-2">
+                    Delete League
+                </h3>
+
+                <p className="text-sm text-gray-500 mb-4">
+                    This action is irreversible.
                 </p>
 
                 <button
                     onClick={handleDeleteLeague}
                     disabled={loadingDeleteLeague}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                    className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
                 >
                     {loadingDeleteLeague ? "Deleting..." : "Delete League"}
                 </button>
