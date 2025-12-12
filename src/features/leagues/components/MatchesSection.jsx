@@ -5,10 +5,14 @@ import {
     getDocs,
     doc,
     writeBatch,
+    deleteDoc,
     serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
+
 import AddMatchModal from "./AddMatchModal";
+import ProposeScoreModal from "./ProposeScoreModal";
+import ForceScoreModal from "./ForceScoreModal";
 
 function makeId() {
     return crypto.randomUUID();
@@ -54,11 +58,14 @@ export default function MatchesSection() {
     const [league, setLeague] = useState(null);
     const [teams, setTeams] = useState([]);
     const [matches, setMatches] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showAddMatch, setShowAddMatch] = useState(false);
     const [activeRound, setActiveRound] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const isOwner = user && league && league.ownerUid === user.uid;
+    const [showAddMatch, setShowAddMatch] = useState(false);
+    const [proposeMatch, setProposeMatch] = useState(null);
+    const [forceMatch, setForceMatch] = useState(null);
+
+    const isOwner = user && league && user.uid === league.ownerUid;
 
     /* --------------------------------
        LOAD DATA
@@ -71,7 +78,8 @@ export default function MatchesSection() {
         setLeague(found ? { id: found.id, ...found.data() } : null);
 
         const tSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
-        setTeams(tSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const teamList = tSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setTeams(teamList);
 
         const mSnap = await getDocs(collection(db, "leagues", leagueId, "matches"));
         const m = mSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -90,8 +98,14 @@ export default function MatchesSection() {
     }, [leagueId]);
 
     /* --------------------------------
-       GROUP BY ROUND
+       HELPERS
     --------------------------------- */
+    const teamsById = useMemo(() => {
+        const map = {};
+        teams.forEach((t) => (map[t.id] = t));
+        return map;
+    }, [teams]);
+
     const rounds = useMemo(() => {
         const map = {};
         matches.forEach((m) => {
@@ -106,56 +120,11 @@ export default function MatchesSection() {
         .map(Number)
         .sort((a, b) => a - b);
 
-    /* --------------------------------
-       GENERATE MATCHES
-    --------------------------------- */
-    async function handleGenerateMatches({ force } = { force: false }) {
-        if (!isOwner) return alert("Only the league owner can do this.");
+    async function deleteMatch(matchId) {
+        if (!isOwner) return;
+        if (!confirm("Delete this match?")) return;
 
-        const matchesRef = collection(db, "leagues", leagueId, "matches");
-        const existing = await getDocs(matchesRef);
-
-        if (!force && !existing.empty) {
-            return alert("Matches already exist.");
-        }
-
-        if (force && !existing.empty) {
-            const batch = writeBatch(db);
-            existing.docs.forEach((d) => batch.delete(d.ref));
-            await batch.commit();
-        }
-
-        const tSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
-        const teamList = tSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        if (teamList.length < 2) return alert("At least 2 teams required.");
-
-        const schedule = generateRoundRobin(teamList.map((t) => t.id));
-        const batch = writeBatch(db);
-
-        schedule.forEach(({ round, pairs }) => {
-            pairs.forEach(([homeId, awayId]) => {
-                const home = teamList.find((t) => t.id === homeId);
-                const away = teamList.find((t) => t.id === awayId);
-
-                batch.set(doc(db, "leagues", leagueId, "matches", makeId()), {
-                    round,
-                    homeTeamId: homeId,
-                    awayTeamId: awayId,
-                    homeTeamName: home?.name,
-                    homeInitials: home?.initials,
-                    homeColor: home?.color,
-                    awayTeamName: away?.name,
-                    awayInitials: away?.initials,
-                    awayColor: away?.color,
-                    homeScore: null,
-                    awayScore: null,
-                    status: "scheduled",
-                    createdAt: serverTimestamp(),
-                });
-            });
-        });
-
-        await batch.commit();
+        await deleteDoc(doc(db, "leagues", leagueId, "matches", matchId));
         await loadAll();
     }
 
@@ -163,32 +132,6 @@ export default function MatchesSection() {
 
     return (
         <div className="space-y-6">
-
-            {/* ADMIN BAR */}
-            {isOwner && (
-                <div className="bg-[#122944] text-white p-5 rounded-xl flex justify-between">
-                    <div>
-                        <div className="font-semibold">Admin: Matches</div>
-                        <div className="text-sm opacity-80">
-                            Generate round-robin schedule
-                        </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            className="bg-[#E96F19] px-4 py-2 rounded-lg font-semibold"
-                            onClick={() => handleGenerateMatches({ force: false })}
-                        >
-                            Generate
-                        </button>
-                        <button
-                            className="bg-white/10 px-4 py-2 rounded-lg"
-                            onClick={() => handleGenerateMatches({ force: true })}
-                        >
-                            Regenerate
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* HEADER */}
             <div className="flex justify-between items-center">
@@ -203,7 +146,7 @@ export default function MatchesSection() {
                 )}
             </div>
 
-            {/* ROUND TABS */}
+            {/* ROUNDS */}
             <div className="flex gap-2 flex-wrap">
                 {roundNumbers.map((r) => (
                     <button
@@ -219,27 +162,31 @@ export default function MatchesSection() {
                 ))}
             </div>
 
-            {/* MATCH LIST */}
+            {/* MATCHES */}
             <div className="space-y-4">
                 {(rounds[activeRound] || []).map((m) => {
+                    const homeTeam = teamsById[m.homeTeamId];
+                    const awayTeam = teamsById[m.awayTeamId];
+
+                    const isCaptain =
+                        user &&
+                        (user.uid === homeTeam?.captainUid ||
+                            user.uid === awayTeam?.captainUid);
+
                     const played = m.homeScore != null && m.awayScore != null;
-                    const statusColor = played
-                        ? "border-green-300"
-                        : m.status === "pending"
-                            ? "border-orange-300"
-                            : "border-gray-200";
 
                     return (
                         <div
                             key={m.id}
-                            className={`bg-white border ${statusColor} rounded-xl p-4 shadow-sm hover:shadow-md transition`}
+                            className={`bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition ${played ? "border-green-300" : "border-gray-200"
+                                }`}
                         >
                             <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
 
                                 {/* HOME */}
-                                <div className="flex items-center gap-3 justify-start">
+                                <div className="flex items-center gap-3">
                                     <div
-                                        className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                        className="w-11 h-11 rounded-full text-white font-bold flex items-center justify-center"
                                         style={{ backgroundColor: m.homeColor }}
                                     >
                                         {m.homeInitials}
@@ -249,14 +196,27 @@ export default function MatchesSection() {
                                     </span>
                                 </div>
 
-                                {/* CENTER */}
+                                {/* CENTER (RESULT / VS) */}
                                 <div className="text-center">
-                                    <div className="text-[#E96F19] font-extrabold text-lg">
-                                        {played ? `${m.homeScore} - ${m.awayScore}` : "VS"}
-                                    </div>
-                                    <div className="text-xs text-gray-400 mt-1">
-                                        Jornada {m.round}
-                                    </div>
+                                    {played ? (
+                                        <>
+                                            <div className="text-green-600 font-extrabold text-2xl">
+                                                {m.homeScore} - {m.awayScore}
+                                            </div>
+                                            <div className="text-xs text-green-500 font-semibold mt-1">
+                                                Final
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="text-[#E96F19] font-extrabold text-lg">
+                                                VS
+                                            </div>
+                                            <div className="text-xs text-gray-400 mt-1">
+                                                Jornada {m.round}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 {/* AWAY */}
@@ -265,24 +225,79 @@ export default function MatchesSection() {
                                         {m.awayTeamName}
                                     </span>
                                     <div
-                                        className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                        className="w-11 h-11 rounded-full text-white font-bold flex items-center justify-center"
                                         style={{ backgroundColor: m.awayColor }}
                                     >
                                         {m.awayInitials}
                                     </div>
                                 </div>
                             </div>
+
+                            {/* ACTIONS */}
+                            {(isOwner || isCaptain) && (
+                                <div className="flex gap-3 justify-end mt-4 text-sm">
+                                    {isCaptain && !played && (
+                                        <button
+                                            onClick={() => setProposeMatch(m)}
+                                            className="text-[#1662A6] font-semibold hover:underline"
+                                        >
+                                            Propose score
+                                        </button>
+                                    )}
+
+                                    {isOwner && (
+                                        <>
+                                            <button
+                                                onClick={() => setForceMatch(m)}
+                                                className="text-red-600 font-semibold hover:underline"
+                                            >
+                                                Force result
+                                            </button>
+
+                                            <button
+                                                onClick={() => deleteMatch(m.id)}
+                                                className="text-gray-400 hover:text-red-500"
+                                            >
+                                                Delete
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
+            {/* MODALS */}
             {showAddMatch && (
                 <AddMatchModal
                     leagueId={leagueId}
                     teams={teams}
                     onClose={() => {
                         setShowAddMatch(false);
+                        loadAll();
+                    }}
+                />
+            )}
+
+            {proposeMatch && (
+                <ProposeScoreModal
+                    leagueId={leagueId}
+                    match={proposeMatch}
+                    onClose={() => {
+                        setProposeMatch(null);
+                        loadAll();
+                    }}
+                />
+            )}
+
+            {forceMatch && (
+                <ForceScoreModal
+                    leagueId={leagueId}
+                    match={forceMatch}
+                    onClose={() => {
+                        setForceMatch(null);
                         loadAll();
                     }}
                 />

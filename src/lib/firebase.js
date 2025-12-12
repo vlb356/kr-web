@@ -552,11 +552,12 @@ export async function forceScore(leagueId, matchId, scoreA, scoreB) {
     throw new Error("Only the owner can force results");
 
   await updateDoc(doc(db, "leagues", leagueId, "matches", matchId), {
-    finalScoreA: scoreA,
-    finalScoreB: scoreB,
+    homeScore: Number(scoreA),
+    awayScore: Number(scoreB),
     status: "confirmed",
   });
 }
+
 
 // Obtener perfil simple de usuario
 export async function getUserProfile(uid) {
