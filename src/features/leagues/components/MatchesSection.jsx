@@ -4,54 +4,40 @@ import {
     collection,
     getDocs,
     doc,
-    setDoc,
     writeBatch,
     serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-
-// Si ya tienes estos componentes, déjalos.
-// Si no existen, puedes borrar estas líneas y el bloque del modal.
 import AddMatchModal from "./AddMatchModal";
 
 function makeId() {
     return crypto.randomUUID();
 }
 
-/**
- * Round-robin (circle method)
- * - Genera jornadas donde todos juegan contra todos 1 vez.
- * - Si número impar, añade "BYE".
- */
+/* --------------------------------
+   ROUND ROBIN (circle method)
+--------------------------------- */
 function generateRoundRobin(teamIds) {
     const teams = [...teamIds];
-    const hasBye = teams.length % 2 === 1;
-    if (hasBye) teams.push("BYE");
+    if (teams.length % 2 === 1) teams.push("BYE");
 
     const n = teams.length;
     const rounds = n - 1;
     const half = n / 2;
-
-    // Array que rotamos (dejando fijo el primero)
     const arr = [...teams];
-
-    const schedule = []; // [{ round: 1, pairs: [[a,b],[c,d]] }...]
+    const schedule = [];
 
     for (let r = 0; r < rounds; r++) {
         const pairs = [];
-
         for (let i = 0; i < half; i++) {
             const home = arr[i];
             const away = arr[n - 1 - i];
-
             if (home !== "BYE" && away !== "BYE") {
                 pairs.push([home, away]);
             }
         }
-
         schedule.push({ round: r + 1, pairs });
 
-        // Rotación: [fixed, last, ...middle]
         const fixed = arr[0];
         const rest = arr.slice(1);
         rest.unshift(rest.pop());
@@ -63,123 +49,104 @@ function generateRoundRobin(teamIds) {
 
 export default function MatchesSection() {
     const { leagueId } = useParams();
-
     const user = auth.currentUser;
 
     const [league, setLeague] = useState(null);
-
-    const [teams, setTeams] = useState([]); // [{id,name,initials,color,description...}]
-    const teamsById = useMemo(() => {
-        const map = new Map();
-        teams.forEach((t) => map.set(t.id, t));
-        return map;
-    }, [teams]);
-
-    const [matches, setMatches] = useState([]); // [{id, homeTeamId, awayTeamId, round, ...}]
+    const [teams, setTeams] = useState([]);
+    const [matches, setMatches] = useState([]);
     const [loading, setLoading] = useState(true);
-
     const [showAddMatch, setShowAddMatch] = useState(false);
+    const [activeRound, setActiveRound] = useState(null);
 
-    const isOwner = !!(user && league && league.ownerUid === user.uid);
+    const isOwner = user && league && league.ownerUid === user.uid;
 
+    /* --------------------------------
+       LOAD DATA
+    --------------------------------- */
     async function loadAll() {
-        if (!leagueId) return;
         setLoading(true);
 
-        // league doc
         const leagueSnap = await getDocs(collection(db, "leagues"));
-        // Nota: no iteramos todo; pero por simplicidad sin getDoc importado aquí:
-        // Mejor: usa getDoc, pero mantengo simple y estable con tu setup mínimo.
-        // Si prefieres, te lo ajusto con getDoc.
         const found = leagueSnap.docs.find((d) => d.id === leagueId);
-        setLeague(found ? { id: found.id, ...found.data() } : { id: leagueId });
+        setLeague(found ? { id: found.id, ...found.data() } : null);
 
-        // teams
         const tSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
-        const t = tSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setTeams(t);
+        setTeams(tSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-        // matches
         const mSnap = await getDocs(collection(db, "leagues", leagueId, "matches"));
-        const m = mSnap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => (a.round || 0) - (b.round || 0));
+        const m = mSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        m.sort((a, b) => (a.round || 0) - (b.round || 0));
         setMatches(m);
+
+        if (m.length > 0) {
+            setActiveRound(Math.min(...m.map((x) => x.round || 1)));
+        }
 
         setLoading(false);
     }
 
     useEffect(() => {
         loadAll();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [leagueId]);
 
-    async function deleteAllMatches() {
-        const mSnap = await getDocs(collection(db, "leagues", leagueId, "matches"));
-        if (mSnap.empty) return;
+    /* --------------------------------
+       GROUP BY ROUND
+    --------------------------------- */
+    const rounds = useMemo(() => {
+        const map = {};
+        matches.forEach((m) => {
+            const r = m.round || 1;
+            if (!map[r]) map[r] = [];
+            map[r].push(m);
+        });
+        return map;
+    }, [matches]);
 
-        const batch = writeBatch(db);
-        mSnap.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
-    }
+    const roundNumbers = Object.keys(rounds)
+        .map(Number)
+        .sort((a, b) => a - b);
 
+    /* --------------------------------
+       GENERATE MATCHES
+    --------------------------------- */
     async function handleGenerateMatches({ force } = { force: false }) {
-        if (!leagueId) return;
+        if (!isOwner) return alert("Only the league owner can do this.");
 
-        if (!isOwner) {
-            alert("Only the league owner can generate matches.");
-            return;
+        const matchesRef = collection(db, "leagues", leagueId, "matches");
+        const existing = await getDocs(matchesRef);
+
+        if (!force && !existing.empty) {
+            return alert("Matches already exist.");
         }
 
-        // Reload counts to avoid stale state
-        const currentMatchesSnap = await getDocs(
-            collection(db, "leagues", leagueId, "matches")
-        );
-
-        if (!force && !currentMatchesSnap.empty) {
-            alert(
-                "Matches already exist. Use 'Regenerate' if you want to recreate them."
-            );
-            return;
+        if (force && !existing.empty) {
+            const batch = writeBatch(db);
+            existing.docs.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
         }
 
         const tSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
         const teamList = tSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        if (teamList.length < 2) {
-            alert("You need at least 2 teams to generate matches.");
-            return;
-        }
-
-        if (force && !currentMatchesSnap.empty) {
-            await deleteAllMatches();
-        }
+        if (teamList.length < 2) return alert("At least 2 teams required.");
 
         const schedule = generateRoundRobin(teamList.map((t) => t.id));
-
         const batch = writeBatch(db);
 
         schedule.forEach(({ round, pairs }) => {
-            pairs.forEach(([homeTeamId, awayTeamId]) => {
-                const home = teamList.find((t) => t.id === homeTeamId);
-                const away = teamList.find((t) => t.id === awayTeamId);
+            pairs.forEach(([homeId, awayId]) => {
+                const home = teamList.find((t) => t.id === homeId);
+                const away = teamList.find((t) => t.id === awayId);
 
-                const id = makeId();
-
-                batch.set(doc(db, "leagues", leagueId, "matches", id), {
+                batch.set(doc(db, "leagues", leagueId, "matches", makeId()), {
                     round,
-                    homeTeamId,
-                    awayTeamId,
-
-                    // Denormalizamos un mínimo para que se renderice bonito incluso si luego cambian nombres
-                    homeTeamName: home?.name || "Home",
-                    homeInitials: home?.initials || "",
-                    homeColor: home?.color || "#1662A6",
-
-                    awayTeamName: away?.name || "Away",
-                    awayInitials: away?.initials || "",
-                    awayColor: away?.color || "#1662A6",
-
+                    homeTeamId: homeId,
+                    awayTeamId: awayId,
+                    homeTeamName: home?.name,
+                    homeInitials: home?.initials,
+                    homeColor: home?.color,
+                    awayTeamName: away?.name,
+                    awayInitials: away?.initials,
+                    awayColor: away?.color,
                     homeScore: null,
                     awayScore: null,
                     status: "scheduled",
@@ -190,35 +157,31 @@ export default function MatchesSection() {
 
         await batch.commit();
         await loadAll();
-        alert("Matches generated successfully.");
     }
 
-    if (loading) {
-        return <div className="text-gray-600">Loading matches…</div>;
-    }
+    if (loading) return <div>Loading matches…</div>;
 
     return (
         <div className="space-y-6">
-            {/* OWNER ADMIN BOX */}
+
+            {/* ADMIN BAR */}
             {isOwner && (
-                <div className="bg-[#122944] text-white rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="bg-[#122944] text-white p-5 rounded-xl flex justify-between">
                     <div>
-                        <div className="text-lg font-semibold">Admin: Matches</div>
-                        <div className="text-sm opacity-90">
-                            Generate a full round-robin schedule (all teams play each other).
+                        <div className="font-semibold">Admin: Matches</div>
+                        <div className="text-sm opacity-80">
+                            Generate round-robin schedule
                         </div>
                     </div>
-
                     <div className="flex gap-2">
                         <button
-                            className="px-4 py-2 rounded-lg font-semibold bg-[#E96F19] hover:bg-[#cf5f15]"
+                            className="bg-[#E96F19] px-4 py-2 rounded-lg font-semibold"
                             onClick={() => handleGenerateMatches({ force: false })}
                         >
                             Generate
                         </button>
-
                         <button
-                            className="px-4 py-2 rounded-lg font-semibold bg-white/10 hover:bg-white/20"
+                            className="bg-white/10 px-4 py-2 rounded-lg"
                             onClick={() => handleGenerateMatches({ force: true })}
                         >
                             Regenerate
@@ -227,102 +190,101 @@ export default function MatchesSection() {
                 </div>
             )}
 
-            {/* CREATE MATCH (manual) */}
-            <div className="flex items-center justify-between">
+            {/* HEADER */}
+            <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-[#122944]">Matches</h2>
-                <button
-                    className="px-4 py-2 rounded-lg bg-[#1662A6] text-white font-semibold hover:bg-[#0f4f86]"
-                    onClick={() => setShowAddMatch(true)}
-                >
-                    + Create Match
-                </button>
+                {isOwner && (
+                    <button
+                        onClick={() => setShowAddMatch(true)}
+                        className="bg-[#1662A6] text-white px-4 py-2 rounded-lg"
+                    >
+                        + Create Match
+                    </button>
+                )}
             </div>
 
-            {matches.length === 0 ? (
-                <div className="bg-white border rounded-xl p-6 text-gray-600">
-                    No matches yet.
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {matches.map((m) => {
-                        const home =
-                            teamsById.get(m.homeTeamId) || {
-                                name: m.homeTeamName,
-                                initials: m.homeInitials,
-                                color: m.homeColor,
-                            };
-                        const away =
-                            teamsById.get(m.awayTeamId) || {
-                                name: m.awayTeamName,
-                                initials: m.awayInitials,
-                                color: m.awayColor,
-                            };
+            {/* ROUND TABS */}
+            <div className="flex gap-2 flex-wrap">
+                {roundNumbers.map((r) => (
+                    <button
+                        key={r}
+                        onClick={() => setActiveRound(r)}
+                        className={`px-4 py-2 rounded-lg font-semibold transition ${activeRound === r
+                                ? "bg-[#1662A6] text-white"
+                                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                    >
+                        Jornada {r}
+                    </button>
+                ))}
+            </div>
 
-                        const scoreText =
-                            m.homeScore == null || m.awayScore == null
-                                ? "No score"
-                                : `${m.homeScore} - ${m.awayScore}`;
+            {/* MATCH LIST */}
+            <div className="space-y-4">
+                {(rounds[activeRound] || []).map((m) => {
+                    const played = m.homeScore != null && m.awayScore != null;
+                    const statusColor = played
+                        ? "border-green-300"
+                        : m.status === "pending"
+                            ? "border-orange-300"
+                            : "border-gray-200";
 
-                        return (
-                            <div
-                                key={m.id}
-                                className="bg-white border rounded-xl p-4 flex items-center justify-between shadow-sm"
-                            >
-                                <div className="flex items-center gap-4">
-                                    {/* HOME */}
-                                    <div className="flex items-center gap-3 min-w-[220px]">
-                                        <div
-                                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                                            style={{ backgroundColor: home?.color || "#1662A6" }}
-                                        >
-                                            {(home?.initials || "?").slice(0, 3)}
-                                        </div>
-                                        <div className="font-semibold text-[#122944]">
-                                            {home?.name || "Home"}
-                                        </div>
+                    return (
+                        <div
+                            key={m.id}
+                            className={`bg-white border ${statusColor} rounded-xl p-4 shadow-sm hover:shadow-md transition`}
+                        >
+                            <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
+
+                                {/* HOME */}
+                                <div className="flex items-center gap-3 justify-start">
+                                    <div
+                                        className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                        style={{ backgroundColor: m.homeColor }}
+                                    >
+                                        {m.homeInitials}
                                     </div>
+                                    <span className="font-semibold text-[#122944]">
+                                        {m.homeTeamName}
+                                    </span>
+                                </div>
 
-                                    {/* VS + ROUND */}
-                                    <div className="text-center min-w-[140px]">
-                                        <div className="text-[#E96F19] font-extrabold">VS</div>
-                                        <div className="text-xs text-gray-500">Round {m.round}</div>
-                                        <div className="text-sm text-gray-700">{scoreText}</div>
+                                {/* CENTER */}
+                                <div className="text-center">
+                                    <div className="text-[#E96F19] font-extrabold text-lg">
+                                        {played ? `${m.homeScore} - ${m.awayScore}` : "VS"}
                                     </div>
-
-                                    {/* AWAY */}
-                                    <div className="flex items-center gap-3 min-w-[220px]">
-                                        <div
-                                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                                            style={{ backgroundColor: away?.color || "#1662A6" }}
-                                        >
-                                            {(away?.initials || "?").slice(0, 3)}
-                                        </div>
-                                        <div className="font-semibold text-[#122944]">
-                                            {away?.name || "Away"}
-                                        </div>
+                                    <div className="text-xs text-gray-400 mt-1">
+                                        Jornada {m.round}
                                     </div>
                                 </div>
 
-                                {/* ACTIONS (si tú ya tienes Edit/Delete, aquí los puedes reenganchar) */}
-                                <div className="flex gap-2">
-                                    <button className="px-3 py-1.5 rounded-md bg-[#1662A6] text-white font-semibold">
-                                        Edit
-                                    </button>
-                                    <button className="px-3 py-1.5 rounded-md bg-red-500 text-white font-semibold">
-                                        Delete
-                                    </button>
+                                {/* AWAY */}
+                                <div className="flex items-center gap-3 justify-end">
+                                    <span className="font-semibold text-[#122944]">
+                                        {m.awayTeamName}
+                                    </span>
+                                    <div
+                                        className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                        style={{ backgroundColor: m.awayColor }}
+                                    >
+                                        {m.awayInitials}
+                                    </div>
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
-            )}
+                        </div>
+                    );
+                })}
+            </div>
 
             {showAddMatch && (
                 <AddMatchModal
                     leagueId={leagueId}
-                    onClose={() => setShowAddMatch(false)}
-                    onCreated={() => loadAll()}
+                    teams={teams}
+                    onClose={() => {
+                        setShowAddMatch(false);
+                        loadAll();
+                    }}
                 />
             )}
         </div>
